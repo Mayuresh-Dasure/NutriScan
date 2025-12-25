@@ -59,7 +59,8 @@ export default function ResultScreen({ route, navigation }) {
         if (data.productName) setProductName(data.productName);
       }
     } catch (error) {
-      Alert.alert('Error', 'Could not analyze image. Please try again.');
+      console.error("Process Image Error:", error);
+      Alert.alert('Error', 'Could not analyze image. Please try again. \n' + error.message);
     } finally {
       setLoading(false);
     }

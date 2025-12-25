@@ -72,6 +72,11 @@ export default function OnboardingScreen({ navigation }) {
             return;
         }
 
+        if (isNaN(parseFloat(age)) || isNaN(parseFloat(weight)) || isNaN(parseFloat(height))) {
+            Alert.alert('Invalid Input', 'Please enter valid numbers for age, weight, and height.');
+            return;
+        }
+
         setSaving(true);
         try {
             const user = auth.currentUser;
@@ -118,7 +123,14 @@ export default function OnboardingScreen({ navigation }) {
                 <View style={styles.inputRow}>
                     <View style={styles.halfInput}>
                         <Text style={styles.label}>Age</Text>
-                        <TextInput style={styles.input} value={age} onChangeText={setAge} keyboardType="numeric" placeholder="e.g 25" />
+                        <TextInput
+                            style={styles.input}
+                            value={age}
+                            onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
+                            keyboardType="numeric"
+                            placeholder="e.g 25"
+                            maxLength={3}
+                        />
                     </View>
                     <View style={styles.halfInput}>
                         <Text style={styles.label}>Gender</Text>
@@ -131,11 +143,25 @@ export default function OnboardingScreen({ navigation }) {
                 <View style={styles.inputRow}>
                     <View style={styles.halfInput}>
                         <Text style={styles.label}>Weight (kg)</Text>
-                        <TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="e.g 70" />
+                        <TextInput
+                            style={styles.input}
+                            value={weight}
+                            onChangeText={(t) => setWeight(t.replace(/[^0-9.]/g, ''))}
+                            keyboardType="numeric"
+                            placeholder="e.g 70"
+                            maxLength={5}
+                        />
                     </View>
                     <View style={styles.halfInput}>
                         <Text style={styles.label}>Height (cm)</Text>
-                        <TextInput style={styles.input} value={height} onChangeText={setHeight} keyboardType="numeric" placeholder="e.g 175" />
+                        <TextInput
+                            style={styles.input}
+                            value={height}
+                            onChangeText={(t) => setHeight(t.replace(/[^0-9]/g, ''))}
+                            keyboardType="numeric"
+                            placeholder="e.g 175"
+                            maxLength={3}
+                        />
                     </View>
                 </View>
             </View>

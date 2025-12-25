@@ -8,6 +8,7 @@ export default function ScanScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(false);
   const [torch, setTorch] = useState(false); // Flash state
+  const [facing, setFacing] = useState('back');
   const cameraRef = useRef(null);
 
   if (!permission) return <View style={styles.blackBg} />;
@@ -56,6 +57,10 @@ export default function ScanScreen({ navigation }) {
     }
   };
 
+  const toggleCameraFacing = () => {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -63,7 +68,7 @@ export default function ScanScreen({ navigation }) {
         style={styles.camera}
         ref={cameraRef}
         enableTorch={torch}
-        facing="back"
+        facing={facing}
       />
 
       {/* Darkened Overlay with transparent cutout */}
@@ -84,10 +89,14 @@ export default function ScanScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Top Controls (Close) */}
+      {/* Top Controls (Close & Flash) */}
       <View style={styles.topControls}>
         <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
           <MaterialIcons name="close" size={28} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.iconButton} onPress={() => setTorch(!torch)}>
+          <Ionicons name={torch ? "flash" : "flash-off"} size={24} color={torch ? "#f1c40f" : "#fff"} />
         </TouchableOpacity>
       </View>
 
@@ -105,9 +114,9 @@ export default function ScanScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        {/* Flash Toggle */}
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => setTorch(!torch)} disabled={loading}>
-          <Ionicons name={torch ? "flash" : "flash-off"} size={28} color={torch ? "#f1c40f" : "#fff"} />
+        {/* Flip Camera Toggle */}
+        <TouchableOpacity style={styles.secondaryButton} onPress={toggleCameraFacing} disabled={loading}>
+          <MaterialIcons name="flip-camera-ios" size={28} color="#fff" />
         </TouchableOpacity>
       </View>
     </View>
@@ -141,7 +150,16 @@ const styles = StyleSheet.create({
   cornerBR: { position: 'absolute', bottom: 0, right: 0, width: 40, height: 40, borderBottomWidth: 4, borderRightWidth: 4, borderColor: '#208091', borderBottomRightRadius: 16 },
 
   // UI Controls
-  topControls: { position: 'absolute', top: 50, left: 20, zIndex: 10 },
+  topControls: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    zIndex: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
   bottomControls: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',

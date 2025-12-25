@@ -3,6 +3,12 @@ import axios from 'axios';
 export const analyzeImageWithGemini = async (base64Data, userProfile = { vegType: 'Vegetarian', goal: 'General Health' }) => {
   try {
     console.log('Sending image to Gemini Service...');
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("Missing API Key: EXPO_PUBLIC_GEMINI_API_KEY");
+      throw new Error("Missing Gemini API Key");
+    }
+
     const response = await axios.post(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
       {
@@ -82,14 +88,23 @@ Rules:
     const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log('Gemini Response:', responseText);
 
+    // Flexible JSON extraction
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('No JSON found in response');
     }
 
-    return JSON.parse(jsonMatch[0]);
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      // Fallback: cleanup potential markdown residue
+      const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '');
+      const secondTry = cleanText.match(/\{[\s\S]*\}/);
+      if (secondTry) return JSON.parse(secondTry[0]);
+      throw e;
+    }
   } catch (error) {
-    console.error('Gemini Service Error:', error);
+    console.error('Gemini Service Error Full:', JSON.stringify(error.response?.data || error.message, null, 2));
     throw error;
   }
 };
