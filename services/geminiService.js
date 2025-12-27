@@ -3,14 +3,8 @@ import axios from 'axios';
 export const analyzeImageWithGemini = async (base64Data, userProfile = { vegType: 'Vegetarian', goal: 'General Health' }) => {
   try {
     console.log('Sending image to Gemini Service...');
-    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("Missing API Key: EXPO_PUBLIC_GEMINI_API_KEY");
-      throw new Error("Missing Gemini API Key");
-    }
-
     const response = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
       {
         contents: [
           {
@@ -37,39 +31,33 @@ Use this schema exactly:
 {
   "productName": "short name of the product",
   "vegetarianStatus": "Vegetarian / Non-Vegetarian / Vegan / Unclear",
-  "healthScore": "number (0-100), based on how well this product fits the user profile and goal. 100 is excellent, 0 is terrible.",
-  "healthInsight": "one sentence (max ~25 words) overall verdict for a typical Indian consumer, personalised to the user's health goal.",
-  "servingDescription": "serving size and unit if available, e.g. 30 g (1 pack)",
-  "calories": "number (kcal per serving)",
-  "protein": "number (g per serving)",
-  "totalFat": "number (g per serving)",
+  "healthScore": "number (0-100).",
+  "healthInsight": "Short punchy verdict (max 10 words).",
+  "scoreExplanation": "One clear sentence explaining WHY this score was given (e.g. 'High score due to high protein and low sugar, but contains minor additives').",
+  "servingDescription": "serving size (e.g. 1 bar, 30g). If unknown, use null.",
+  "calories": "number (kcal). null if unknown/not-food.",
+  "protein": "number (g). null if unknown.",
+  "carbohydrates": "number (g). null if unknown.",
+  "totalFat": "number (g). null if unknown.",
+  "fiber": "number (g). null if unknown.",
   "sugar": {
-    "labelSugar": "number (g per serving as written in the nutrition table, 0 if missing)",
-    "estimatedTotalSugar": "string like '8-10' for estimated g per serving including hidden sugars",
-    "hiddenSugars": [
-      "list of ingredient names that are sugars or sugar derivatives"
-    ],
-    "sugarComment": "one short sentence about sugar risk"
+    "labelSugar": "number (g). null if unknown.",
+    "hiddenSugars": ["list of hidden sugar types found"]
   },
+  "allergens": ["list of allergens"],
+  "alternatives": ["Alternative Name : Short Reason why it's better"],
   "preservatives": [
-    {
-      "name": "e.g. Sodium benzoate",
-      "concern": "one short sentence on potential issues"
-    }
+    { "name": "e.g. Sodium benzoate", "concern": "short concern" }
   ],
   "additives": [
-    {
-      "name": "e.g. MSG",
-      "concern": "one short sentence about possible effects"
-    }
+    { "name": "e.g. MSG", "concern": "short concern" }
   ]
 }
 
 Rules:
-- Prefer PER SERVING values over per 100 g.
-- If a field is unknown, use a sensible default: numbers as "0" and strings as "Unknown".
-- **healthScore**: Be strict. High sugar/preservatives should lower the score significantly for weight loss/health goals.
-- Output must be ONLY the JSON.
+- If nutrition data is missing (e.g. cosmetic product or unclear label), return null for those fields, DO NOT guess 0.
+- For alternatives, follow the format "Name : Reason".
+- Output must be ONLY valid JSON.
 `,
               },
               {
@@ -88,23 +76,14 @@ Rules:
     const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log('Gemini Response:', responseText);
 
-    // Flexible JSON extraction
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('No JSON found in response');
     }
 
-    try {
-      return JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      // Fallback: cleanup potential markdown residue
-      const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '');
-      const secondTry = cleanText.match(/\{[\s\S]*\}/);
-      if (secondTry) return JSON.parse(secondTry[0]);
-      throw e;
-    }
+    return JSON.parse(jsonMatch[0]);
   } catch (error) {
-    console.error('Gemini Service Error Full:', JSON.stringify(error.response?.data || error.message, null, 2));
+    console.error('Gemini Service Error:', error);
     throw error;
   }
 };

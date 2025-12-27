@@ -1,17 +1,22 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { ref, update } from 'firebase/database';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Card } from '../components/Card';
+import { GradientButton } from '../components/GradientButton';
+import { Body, Heading, Label } from '../components/Typography';
+import { RADIUS, SHADOWS, SPACING } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 import { auth, database } from '../services/firebaseConfig';
 
 const DIET_TYPES = ['Vegetarian', 'Non-Vegetarian', 'Vegan', 'Eggetarian'];
 const HEALTH_GOALS = ['General Health', 'Weight Loss', 'Muscle Gain', 'Diabetes Control', 'Heart Health'];
 
 export default function OnboardingScreen({ navigation }) {
-    const [diet, setDiet] = useState([]);
+    const { colors, isDark } = useTheme();
+    const [diet, setDiet] = useState(''); // Single selection
     const [goal, setGoal] = useState('');
 
-    // Personal Details
     const [age, setAge] = useState('');
     const [weight, setWeight] = useState('');
     const [height, setHeight] = useState('');
@@ -20,39 +25,31 @@ export default function OnboardingScreen({ navigation }) {
     const [saving, setSaving] = useState(false);
 
     const handleDietSelect = (selectedDiet) => {
-        if (diet.includes(selectedDiet)) {
-            setDiet(diet.filter(d => d !== selectedDiet));
-        } else {
-            setDiet([...diet, selectedDiet]);
-        }
+        setDiet(selectedDiet);
     };
 
     const calculateNeeds = () => {
-        // Mifflin-St Jeor Equation
         const w = parseFloat(weight);
         const h = parseFloat(height);
         const a = parseFloat(age);
 
-        if (!w || !h || !a) return { calories: 2000, protein: 50 }; // Fallback
+        if (!w || !h || !a) return { calories: 2000, protein: 50 };
 
-        // BMR Calculation
         let bmr = (10 * w) + (6.25 * h) - (5 * a);
         bmr += (gender === 'Male' ? 5 : -161);
-
-        // TDEE (Total Daily Energy Expenditure) - Assuming 'Sedentary' (1.2) for baseline safety
         let tdee = bmr * 1.2;
 
         let targetCalories = Math.round(tdee);
-        let targetProtein = Math.round(w * 0.8); // 0.8g per kg baseline
+        let targetProtein = Math.round(w * 0.8);
 
         switch (goal) {
             case 'Weight Loss':
                 targetCalories -= 500;
-                targetProtein = Math.round(w * 1.5); // High protein for muscle retention
+                targetProtein = Math.round(w * 1.5);
                 break;
             case 'Muscle Gain':
                 targetCalories += 300;
-                targetProtein = Math.round(w * 1.8); // High protein for growth
+                targetProtein = Math.round(w * 1.8);
                 break;
             case 'Heart Health':
             case 'Diabetes Control':
@@ -60,20 +57,14 @@ export default function OnboardingScreen({ navigation }) {
                 break;
         }
 
-        // Safety caps
         if (targetCalories < 1200) targetCalories = 1200;
 
         return { calories: targetCalories, protein: targetProtein };
     };
 
     const handleSave = async () => {
-        if (diet.length === 0 || !goal || !age || !weight || !height) {
+        if (!diet || !goal || !age || !weight || !height) {
             Alert.alert('Details Required', 'Please fill in all details correctly.');
-            return;
-        }
-
-        if (isNaN(parseFloat(age)) || isNaN(parseFloat(weight)) || isNaN(parseFloat(height))) {
-            Alert.alert('Invalid Input', 'Please enter valid numbers for age, weight, and height.');
             return;
         }
 
@@ -90,7 +81,8 @@ export default function OnboardingScreen({ navigation }) {
                     weight,
                     height,
                     gender,
-                    calculatedLimits: limits
+                    calculatedLimits: limits,
+                    onboardingComplete: true
                 });
             }
         } catch (error) {
@@ -103,77 +95,63 @@ export default function OnboardingScreen({ navigation }) {
 
     const Option = ({ label, isSelected, onPress }) => (
         <TouchableOpacity
-            style={[styles.option, isSelected && styles.optionSelected]}
+            style={[
+                styles.option,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+            ]}
             onPress={() => onPress(label)}
         >
-            <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{label}</Text>
-            {isSelected && <MaterialIcons name="check-circle" size={20} color="#fff" />}
+            <Body style={[styles.optionText, { color: isSelected ? '#fff' : colors.text.primary }]}>{label}</Body>
+            {isSelected && <MaterialIcons name="done" size={20} color="#fff" />}
         </TouchableOpacity>
     );
 
     return (
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
             <View style={styles.header}>
-                <Text style={styles.title}>Welcome!</Text>
-                <Text style={styles.subtitle}>Help us analyze food labels better for you.</Text>
+                <Heading level={1}>Tailor Your Experience</Heading>
+                <Body muted>We use these details to provide personalized health scores and nutrition targets.</Body>
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>About You</Text>
-                <View style={styles.inputRow}>
-                    <View style={styles.halfInput}>
-                        <Text style={styles.label}>Age</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={age}
-                            onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
-                            keyboardType="numeric"
-                            placeholder="e.g 25"
-                            maxLength={3}
-                        />
+                <Heading level={3} style={styles.sectionTitle}>Physical Statistics</Heading>
+                <Card style={styles.biometricsCard}>
+                    <View style={styles.inputRow}>
+                        <View style={styles.halfInput}>
+                            <Label style={{ color: colors.text.secondary }}>Age</Label>
+                            <TextInput style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text.primary }]} value={age} onChangeText={setAge} keyboardType="numeric" placeholder="25" placeholderTextColor={colors.text.muted} />
+                        </View>
+                        <View style={styles.halfInput}>
+                            <Label style={{ color: colors.text.secondary }}>Gender</Label>
+                            <TouchableOpacity style={[styles.genderToggle, { backgroundColor: colors.inputBackground, borderColor: colors.border }]} onPress={() => setGender(gender === 'Male' ? 'Female' : 'Male')}>
+                                <Body style={[styles.genderText, { color: colors.text.primary }]}>{gender}</Body>
+                                <MaterialIcons name={gender === 'Male' ? 'male' : 'female'} size={20} color={colors.primary} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                    <View style={styles.halfInput}>
-                        <Text style={styles.label}>Gender</Text>
-                        <TouchableOpacity style={styles.genderToggle} onPress={() => setGender(gender === 'Male' ? 'Female' : 'Male')}>
-                            <Text style={styles.genderText}>{gender}</Text>
-                            <MaterialIcons name={gender === 'Male' ? 'male' : 'female'} size={20} color="#208091" />
-                        </TouchableOpacity>
+                    <View style={styles.inputRow}>
+                        <View style={styles.halfInput}>
+                            <Label style={{ color: colors.text.secondary }}>Weight (kg)</Label>
+                            <TextInput style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text.primary }]} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="70" placeholderTextColor={colors.text.muted} />
+                        </View>
+                        <View style={styles.halfInput}>
+                            <Label style={{ color: colors.text.secondary }}>Height (cm)</Label>
+                            <TextInput style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text.primary }]} value={height} onChangeText={setHeight} keyboardType="numeric" placeholder="175" placeholderTextColor={colors.text.muted} />
+                        </View>
                     </View>
-                </View>
-                <View style={styles.inputRow}>
-                    <View style={styles.halfInput}>
-                        <Text style={styles.label}>Weight (kg)</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={weight}
-                            onChangeText={(t) => setWeight(t.replace(/[^0-9.]/g, ''))}
-                            keyboardType="numeric"
-                            placeholder="e.g 70"
-                            maxLength={5}
-                        />
-                    </View>
-                    <View style={styles.halfInput}>
-                        <Text style={styles.label}>Height (cm)</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={height}
-                            onChangeText={(t) => setHeight(t.replace(/[^0-9]/g, ''))}
-                            keyboardType="numeric"
-                            placeholder="e.g 175"
-                            maxLength={3}
-                        />
-                    </View>
-                </View>
+                </Card>
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Dietary Preference (Select all)</Text>
+                <Heading level={3} style={styles.sectionTitle}>Dietary Preferences</Heading>
                 <View style={styles.optionsGrid}>
                     {DIET_TYPES.map(type => (
                         <Option
                             key={type}
                             label={type}
-                            isSelected={diet.includes(type)}
+                            isSelected={diet === type}
                             onPress={handleDietSelect}
                         />
                     ))}
@@ -181,7 +159,7 @@ export default function OnboardingScreen({ navigation }) {
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Primary Goal</Text>
+                <Heading level={3} style={styles.sectionTitle}>Primary Health Goal</Heading>
                 <View style={styles.optionsGrid}>
                     {HEALTH_GOALS.map(hGoal => (
                         <Option
@@ -194,46 +172,50 @@ export default function OnboardingScreen({ navigation }) {
                 </View>
             </View>
 
-            <TouchableOpacity style={styles.continueButton} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.continueButtonText}>Get Started</Text>}
-            </TouchableOpacity>
+            <GradientButton
+                title="Create My Profile"
+                onPress={handleSave}
+                loading={saving}
+                style={{ marginTop: SPACING.xl, marginBottom: 40 }}
+            />
         </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flexGrow: 1, backgroundColor: '#fff', padding: 24, paddingVertical: 60 },
-    header: { marginBottom: 32 },
-    title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-    subtitle: { fontSize: 16, color: '#666' },
-    section: { marginBottom: 24 },
-    sectionTitle: { fontSize: 16, fontWeight: '600', color: '#208091', marginBottom: 12 },
-    optionsGrid: { gap: 12 },
+    container: { flex: 1 },
+    content: { padding: SPACING.lg, paddingTop: 80 },
+    header: { marginBottom: SPACING.xl },
+    section: { marginBottom: SPACING.xl },
+    sectionTitle: { marginBottom: SPACING.md },
+    biometricsCard: { padding: SPACING.md },
+    optionsGrid: { gap: 10 },
     option: {
-        padding: 16,
-        borderRadius: 12,
+        padding: SPACING.md,
+        borderRadius: RADIUS.md,
         borderWidth: 1,
-        borderColor: '#eee',
-        backgroundColor: '#f9f9f9',
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        ...SHADOWS.soft,
     },
-    optionSelected: { backgroundColor: '#208091', borderColor: '#208091' },
-    optionText: { fontSize: 16, color: '#444' },
-    optionTextSelected: { color: '#fff', fontWeight: 'bold' },
-    continueButton: {
-        backgroundColor: '#208091',
-        paddingVertical: 16,
-        borderRadius: 30,
-        alignItems: 'center',
-        marginTop: 24, marginBottom: 24
-    },
-    continueButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-    inputRow: { flexDirection: 'row', gap: 16, marginBottom: 12 },
+    optionText: { fontWeight: '600' },
+    inputRow: { flexDirection: 'row', gap: 16, marginBottom: SPACING.sm },
     halfInput: { flex: 1 },
-    label: { fontSize: 13, color: '#666', marginBottom: 6 },
-    input: { backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#eee', padding: 12, borderRadius: 8, fontSize: 16 },
-    genderToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#eee', padding: 12, borderRadius: 8 },
-    genderText: { fontSize: 16, color: '#333' }
+    input: {
+        padding: 14,
+        borderRadius: RADIUS.md,
+        fontSize: 16,
+        fontWeight: '500',
+        borderWidth: 1,
+    },
+    genderToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 14,
+        borderRadius: RADIUS.md,
+        borderWidth: 1,
+    },
+    genderText: { fontWeight: '500' }
 });

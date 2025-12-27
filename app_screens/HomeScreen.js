@@ -1,253 +1,277 @@
-import { MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
-import { get, onValue, ref } from 'firebase/database';
+import { get, ref } from 'firebase/database';
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { COLORS, FONTS, SHADOWS, SPACING } from '../constants/theme.js';
+import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { Card } from '../components/Card';
+import { ProgressRing } from '../components/Progress';
+import { Body, Heading, Label } from '../components/Typography';
+import { COLORS, RADIUS, SHADOWS, SPACING } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 import { auth, database } from '../services/firebaseConfig';
+import { getHabitStats } from '../services/habitService';
 
 export default function HomeScreen({ navigation }) {
-    const [loading, setLoading] = useState(true);
-    const [summary, setSummary] = useState({ totalCalories: 0, totalProtein: 0, avgSugar: 0 });
-    const [limits, setLimits] = useState({ calories: 2000, protein: 50 });
+    const { colors, isDark } = useTheme();
+    const [username, setUsername] = useState('');
+    const [profileImage, setProfileImage] = useState(null);
+    const [habitStats, setHabitStats] = useState({ currentStreak: 0, totalScans: 0 });
+    const [summary, setSummary] = useState({ totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0, totalFiber: 0 });
+    const [limits, setLimits] = useState({ calories: 2500, protein: 120, carbohydrates: 300, fat: 80, fiber: 30 });
 
-    useFocusEffect(React.useCallback(() => { loadData(); }, []));
-
-    const getRecommendedLimits = (goal) => {
-        switch (goal) {
-            case 'Muscle Gain': return { calories: 2800, protein: 120 };
-            case 'Weight Loss': return { calories: 1800, protein: 90 };
-            case 'Heart Health': return { calories: 2000, protein: 60 };
-            case 'Diabetes Control': return { calories: 1900, protein: 70 };
-            default: return { calories: 2200, protein: 50 };
-        }
-    };
+    useFocusEffect(React.useCallback(() => {
+        loadData();
+    }, []));
 
     const loadData = async () => {
         const user = auth.currentUser;
-        if (!user) { setLoading(false); return; }
+        if (!user) return;
 
         try {
+            // Fetch username, image, and limits
             const settingsSnap = await get(ref(database, `users/${user.uid}/settings`));
             if (settingsSnap.exists()) {
                 const data = settingsSnap.val();
-                if (data.calculatedLimits) {
-                    setLimits(data.calculatedLimits);
-                } else if (data.goal) {
-                    setLimits(getRecommendedLimits(data.goal));
-                }
+                if (data.username) setUsername(data.username);
+                if (data.profileImage) setProfileImage(data.profileImage);
+                if (data.calculatedLimits) setLimits({ ...limits, ...data.calculatedLimits });
             }
-        } catch (err) {
-            console.log("Error fetching settings", err);
-        }
 
-        const logsRef = ref(database, `users/${user.uid}/foodLogs`);
-        const unsubscribe = onValue(logsRef, (snapshot) => {
-            const data = snapshot.val();
-            const todayLogs = [];
+            // Fetch habit stats
+            const hStats = await getHabitStats(user.uid);
+            setHabitStats(hStats);
 
-            if (data) {
-                const now = new Date();
-                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-                Object.keys(data).forEach((key) => {
-                    const log = data[key];
-                    if (log.timestamp >= todayStart) todayLogs.push({ id: key, ...log });
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStart = today.getTime();
+
+            // Fetch today's food logs
+            const logsRef = ref(database, `users/${user.uid}/foodLogs`);
+            const logsSnap = await get(logsRef);
+            let totalCal = 0;
+            let totalProt = 0;
+            let totalCarbs = 0;
+            let totalFat = 0;
+            let totalFiber = 0;
+
+            if (logsSnap.exists()) {
+                const logs = logsSnap.val();
+                Object.values(logs).forEach(log => {
+                    // Check for today totals (Start of day to End of day)
+                    // limit to entries strictly for today to avoid future logs appearing
+                    if (log.timestamp >= todayStart && log.timestamp < todayStart + 86400000) {
+                        totalCal += parseFloat(log.calories) || 0;
+                        totalProt += parseFloat(log.protein) || 0;
+                        totalCarbs += parseFloat(log.carbohydrates) || 0;
+                        totalFat += parseFloat(log.totalFat) || 0;
+                        totalFiber += parseFloat(log.fiber) || 0;
+                    }
                 });
             }
 
-            const totalCal = todayLogs.reduce((sum, log) => sum + (parseFloat(log.calories) || 0), 0);
-            const totalProt = todayLogs.reduce((sum, log) => sum + (parseFloat(log.protein) || 0), 0);
-            const avgSug = todayLogs.length > 0 ? todayLogs.reduce((sum, log) => sum + (parseFloat(log.sugar) || 0), 0) / todayLogs.length : 0;
-
             setSummary({
                 totalCalories: Math.round(totalCal),
-                totalProtein: Math.round(totalProt * 10) / 10,
-                avgSugar: Math.round(avgSug * 10) / 10
+                totalProtein: Math.round(totalProt),
+                totalCarbs: Math.round(totalCarbs),
+                totalFat: Math.round(totalFat),
+                totalFiber: Math.round(totalFiber)
             });
-            setLoading(false);
-        });
 
-        return unsubscribe;
+        } catch (err) {
+            console.log("Error loading Home data", err);
+        }
     };
 
-    const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    const calPercent = Math.min((summary.totalCalories / limits.calories) * 100, 100);
-    const protPercent = Math.min((summary.totalProtein / limits.protein) * 100, 100);
-
-    if (loading) return <View style={styles.centerContainer}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    const MacroRing = ({ label, current, target, color }) => {
+        const progress = Math.min((current / target) * 100, 100);
+        return (
+            <View style={{ alignItems: 'center' }}>
+                <ProgressRing
+                    progress={progress}
+                    size={60}
+                    strokeWidth={5}
+                    color={color}
+                    bgColor="rgba(255,255,255,0.1)"
+                    hideLegend
+                />
+                <View style={{ marginTop: 8, alignItems: 'center' }}>
+                    <Label style={{ color: '#94a3b8', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</Label>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff', marginTop: 2 }}>{current}<Text style={{ fontSize: 10, color: '#64748b' }}>/{target}</Text></Text>
+                </View>
+            </View>
+        );
+    };
 
     return (
-        <View style={styles.mainContainer}>
-            <ScrollView
-                style={styles.container}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 100 }}
-            >
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+            <View style={styles.content}>
+
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.dateText}>{todayDate}</Text>
-                        <Text style={styles.greeting}>Hello!</Text>
+                        <Text style={[styles.greeting, { color: colors.text.primary }]}>Hi, {username || 'There'}</Text>
+                        {/* Daily Greeting */}
+                        <Text style={[styles.subGreeting, { color: colors.text.muted }]}>Let's hit your goals today!</Text>
                     </View>
-                    <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.avatarPlaceholder}>
-                        <MaterialIcons name="person" size={24} color={COLORS.primary} />
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View style={styles.streakContainer}>
+                            <Ionicons name="flame" size={20} color="#f97316" />
+                            <Text style={styles.streakText}>{habitStats.currentStreak}</Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Profile')}
+                            style={{
+                                width: 40, height: 40, borderRadius: 20,
+                                backgroundColor: isDark ? '#334155' : '#f1f5f9',
+                                justifyContent: 'center', alignItems: 'center',
+                                borderWidth: 1, borderColor: isDark ? '#475569' : '#e2e8f0',
+                                overflow: 'hidden'
+                            }}
+                        >
+                            {profileImage ? (
+                                <Image
+                                    source={{ uri: profileImage }}
+                                    style={{ width: '100%', height: '100%' }}
+                                    resizeMode="cover"
+                                />
+                            ) : (
+                                <Ionicons name="person" size={20} color={colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Main Health Card */}
+                <Card style={[styles.healthCard, { backgroundColor: '#0f172a' }]}>
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>Health Progress</Text>
+                        <View style={styles.todayBadge}>
+                            <Text style={styles.todayText}>TODAY</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.ringsContainer}>
+                        {/* Calories - Dominant */}
+                        <View style={styles.mainRingWrapper}>
+                            <ProgressRing
+                                progress={Math.min((summary.totalCalories / limits.calories) * 100, 100)}
+                                size={120}
+                                strokeWidth={10}
+                                color={colors.primary}
+                                bgColor="rgba(255,255,255,0.1)"
+                                hideLegend
+                            />
+                            <View style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '700', marginBottom: 2, letterSpacing: 0.5 }}>CALORIES</Text>
+                                <Text style={styles.calText}>{summary.totalCalories}</Text>
+                                <Text style={styles.calTarget}>/ {limits.calories}</Text>
+                            </View>
+                        </View>
+
+                        {/* Macros */}
+                        <View style={styles.macrosRow}>
+                            <MacroRing label="PROTEIN" current={summary.totalProtein} target={limits.protein} color="#f97316" />
+                            <MacroRing label="CARBS" current={summary.totalCarbs} target={limits.carbohydrates} color="#3b82f6" />
+                            <MacroRing label="FIBRE" current={summary.totalFiber} target={limits.fiber || 30} color="#22c55e" />
+                        </View>
+                    </View>
+                </Card>
+
+                {/* Quick Actions */}
+                <View style={styles.actionsContainer}>
+                    {/* Quick Scan */}
+                    <TouchableOpacity
+                        style={[styles.actionCard, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}
+                        onPress={() => navigation.navigate('Scan')}
+                        activeOpacity={0.8}
+                    >
+                        <View style={[styles.iconBox, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                            <Ionicons name="scan" size={24} color="#10b981" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.actionTitle, { color: colors.text.primary }]}>Quick Scan</Text>
+                            <Text style={styles.actionDesc}>Decode any label instantly</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
+                    </TouchableOpacity>
+
+                    {/* My Diary */}
+                    <TouchableOpacity
+                        style={[styles.actionCard, { backgroundColor: isDark ? '#1e293b' : '#fff' }]}
+                        onPress={() => navigation.navigate('Diary')}
+                        activeOpacity={0.8}
+                    >
+                        <View style={[styles.iconBox, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
+                            <Ionicons name="journal" size={24} color="#3b82f6" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.actionTitle, { color: colors.text.primary }]}>My Journal</Text>
+                            <Text style={styles.actionDesc}>Review your recent intake</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#cbd5e1" />
                     </TouchableOpacity>
                 </View>
 
-                {/* Main Summary Card */}
-                <View style={styles.summarySection}>
-                    <Text style={styles.summaryTitle}>Daily Summary</Text>
-
-                    <View style={styles.calorieRow}>
+                {/* Pro Tip - Lighter Style */}
+                <View style={[styles.tipCard, { backgroundColor: 'rgba(16, 185, 129, 0.05)' }]}>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <FontAwesome5 name="lightbulb" size={18} color="#10b981" style={{ marginTop: 2 }} />
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.bigCalValue}>{summary.totalCalories}</Text>
-                            <Text style={styles.bigCalLabel}>kcal eaten</Text>
-                            <Text style={styles.goalText}>Goal: {limits.calories}</Text>
-                        </View>
-                        <View style={styles.ringContainer}>
-                            <View style={[styles.ringInner, { borderColor: calPercent > 100 ? COLORS.error : COLORS.primary, borderRightColor: '#eee', borderBottomColor: '#eee' }]}>
-                                <MaterialIcons name="local-fire-department" size={32} color={calPercent > 100 ? COLORS.error : COLORS.primary} />
-                            </View>
-                        </View>
-                    </View>
-
-                    <View style={styles.progressBarBg}>
-                        <LinearGradient
-                            colors={calPercent > 100 ? [COLORS.error, '#EF4444'] : [COLORS.gradientStart, COLORS.gradientEnd]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={[styles.progressBarFill, { width: `${calPercent}%` }]}
-                        />
-                    </View>
-
-                    <View style={styles.statsRow}>
-                        <View style={styles.statBox}>
-                            <View style={styles.statHeader}>
-                                <Text style={styles.statLabel}>Protein</Text>
-                                <Text style={styles.statGoal}>{limits.protein}g goal</Text>
-                            </View>
-                            <View style={styles.miniBarBg}>
-                                <View style={[styles.miniBarFill, { width: `${protPercent}%`, backgroundColor: COLORS.secondary }]} />
-                            </View>
-                            <Text style={styles.statValue}>{summary.totalProtein}g</Text>
-                        </View>
-
-                        <View style={styles.statBox}>
-                            <View style={styles.statHeader}>
-                                <Text style={styles.statLabel}>Avg Sugar</Text>
-                            </View>
-                            <Text style={[styles.statValue, { color: summary.avgSugar > 10 ? COLORS.warning : COLORS.success, marginTop: 8 }]}>
-                                {summary.avgSugar}g
-                            </Text>
+                            <Text style={styles.tipTitle}>Pro Tip:</Text>
+                            <Text style={styles.tipText}>Always check for hidden sugars in processed foods by scanning the full ingredients list.</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Action Call */}
-                <View style={styles.actionCard}>
-                    <Text style={styles.actionTitle}>Track your next meal</Text>
-                    <Text style={styles.actionText}>Scan a label to update your daily stats.</Text>
-                </View>
-
-            </ScrollView>
-
-            {/* FAB - Quick Scan */}
-            <TouchableOpacity
-                style={styles.fab}
-                onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    navigation.navigate('Scan');
-                }}
-                activeOpacity={0.8}
-            >
-                <LinearGradient
-                    colors={[COLORS.gradientStart, COLORS.gradientEnd]}
-                    style={styles.fabGradient}
-                >
-                    <MaterialIcons name="add-a-photo" size={28} color="#fff" />
-                </LinearGradient>
-            </TouchableOpacity>
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    mainContainer: { flex: 1, backgroundColor: COLORS.background },
-    container: { flex: 1, paddingHorizontal: SPACING.l },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
+    container: { flex: 1 },
+    content: { flex: 1, padding: 20, paddingTop: 60, paddingBottom: 20, justifyContent: 'space-between' },
 
-    header: {
-        marginTop: 60,
-        marginBottom: SPACING.l,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+    // Header
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+    greeting: { fontSize: 24, fontWeight: '800' },
+    subGreeting: { fontSize: 13, marginTop: 2 },
+    streakContainer: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(249, 115, 22, 0.2)'
     },
-    dateText: { fontSize: 13, color: COLORS.textSecondary, fontFamily: FONTS.semiBold, textTransform: 'uppercase', letterSpacing: 0.5 },
-    greeting: { fontSize: 28, fontFamily: FONTS.bold, color: COLORS.textPrimary, marginTop: 4 },
-    avatarPlaceholder: {
-        width: 40, height: 40, borderRadius: 20, backgroundColor: '#E0E7FF',
-        justifyContent: 'center', alignItems: 'center'
-    },
+    streakText: { color: '#f97316', fontWeight: '800', fontSize: 14 },
 
-    summarySection: {
-        backgroundColor: COLORS.surface,
-        padding: SPACING.l,
-        borderRadius: 24,
-        marginBottom: SPACING.l,
-        ...SHADOWS.md
-    },
-    summaryTitle: { fontSize: 16, fontFamily: FONTS.semiBold, color: COLORS.textSecondary, marginBottom: SPACING.s },
+    // Health Card
+    healthCard: { padding: 24, borderRadius: 30, marginBottom: 20 },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    cardTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+    todayBadge: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    todayText: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
-    calorieRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.m },
-    bigCalValue: { fontSize: 36, fontFamily: FONTS.bold, color: COLORS.textPrimary },
-    bigCalLabel: { fontSize: 14, fontFamily: FONTS.regular, color: COLORS.textLight },
-    goalText: { fontSize: 12, color: COLORS.textLight, marginTop: 2 },
+    ringsContainer: { alignItems: 'center', gap: 24 },
+    mainRingWrapper: { justifyContent: 'center', alignItems: 'center', height: 130 },
+    calText: { color: '#fff', fontSize: 24, fontWeight: '800' },
+    calTarget: { color: '#94a3b8', fontSize: 12, fontWeight: '600' },
 
-    ringContainer: { width: 60, height: 60 },
-    ringInner: {
-        width: '100%', height: '100%', borderRadius: 30, borderWidth: 4,
-        justifyContent: 'center', alignItems: 'center', transform: [{ rotate: '-45deg' }]
-    },
+    macrosRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingHorizontal: 10 },
 
-    progressBarBg: { height: 8, backgroundColor: COLORS.background, borderRadius: 4, overflow: 'hidden', marginBottom: SPACING.l },
-    progressBarFill: { height: '100%', borderRadius: 4 },
-
-    statsRow: { flexDirection: 'row', gap: SPACING.m },
-    statBox: {
-        flex: 1, backgroundColor: COLORS.background, padding: SPACING.m,
-        borderRadius: 16, justifyContent: 'space-between'
-    },
-    statHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-    statLabel: { fontSize: 12, fontFamily: FONTS.semiBold, color: COLORS.textSecondary },
-    statGoal: { fontSize: 10, fontFamily: FONTS.regular, color: COLORS.textLight },
-    miniBarBg: { height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, marginBottom: 8 },
-    miniBarFill: { height: '100%', borderRadius: 3 },
-    statValue: { fontSize: 18, fontFamily: FONTS.bold, color: COLORS.textPrimary },
-
+    // Actions
+    actionsContainer: { gap: 12, marginBottom: 24 },
     actionCard: {
-        backgroundColor: '#ECFDF5',
-        padding: SPACING.m,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: COLORS.primaryLight
+        flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 24, gap: 16,
+        ...SHADOWS.soft
     },
-    actionTitle: { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.primaryDark },
-    actionText: { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.secondary, marginTop: 4 },
+    iconBox: { width: 50, height: 50, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+    actionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+    actionDesc: { color: '#94a3b8', fontSize: 12 },
 
-    fab: {
-        position: 'absolute',
-        bottom: SPACING.l,
-        right: SPACING.l,
-        ...SHADOWS.lg,
-    },
-    fabGradient: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        justifyContent: 'center',
-        alignItems: 'center'
-    }
+    // Pro Tip
+    tipCard: { padding: 20, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.1)' },
+    tipTitle: { color: '#10b981', fontWeight: '700', fontSize: 14, marginBottom: 4 },
+    tipText: { color: '#64748b', fontSize: 13, lineHeight: 20 }
 });
