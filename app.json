@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "LabelScanner",
-    "slug": "LabelScanner",
+    "name": "NutriScanner",
+    "slug": "nutriscanner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "labelscanner",
+    "scheme": "nutriscanner",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

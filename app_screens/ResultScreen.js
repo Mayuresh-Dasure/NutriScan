@@ -1,46 +1,109 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
-import { get, push, ref, serverTimestamp } from 'firebase/database';
-import { useEffect, useState } from 'react';
+import { get, push, ref, remove, serverTimestamp, update } from 'firebase/database';
+import { useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
   ImageBackground,
   ScrollView,
-  Share,
+  StatusBar,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
+  Animated,
+  Easing
 } from 'react-native';
+import { Badge } from '../components/Badges';
+import { Card } from '../components/Card';
+import { GradientButton } from '../components/GradientButton';
+import { ProgressRing } from '../components/Progress';
+import { Body, Heading, Label } from '../components/Typography';
+import { COLORS, RADIUS, SHADOWS, SPACING } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 import { auth, database } from '../services/firebaseConfig';
 import { analyzeImageWithGemini } from '../services/geminiService';
+import { updateStreakAndAchievements } from '../services/habitService';
+import { updateLogEntry } from '../services/logService';
 
 export default function ResultScreen({ route, navigation }) {
+  const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(false);
+  const [multiplier, setMultiplier] = useState(1);
   const [analysis, setAnalysis] = useState(null);
   const [productName, setProductName] = useState('');
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [notes, setNotes] = useState('');
 
-  const savedAnalysis = route?.params?.savedAnalysis;
-  const imageUri = savedAnalysis?.imageUri || route?.params?.imageUri || '';
+  // Animation State
+  const [animatedScore, setAnimatedScore] = useState(0);
+
+  const { imageUri, logData } = route.params || {};
 
   useEffect(() => {
-    if (savedAnalysis) {
-      setAnalysis(savedAnalysis);
-      setProductName(savedAnalysis.productName || '');
+    let target = 0;
+    if (logData) {
+      // History Mode
+      const portions = logData.portions || 1;
+      setAnalysis({ ...logData }); // Use raw data, we will compute display values dynamically
+      setProductName(logData.productName || '');
+      setNotes(logData.notes || '');
+      setMultiplier(portions);
+      target = logData.healthScore || 0;
     } else if (imageUri) {
+      // Scan Mode - processing will handle analysis setting
       processImage(imageUri);
+      return;
     }
-  }, [imageUri, savedAnalysis]);
+    checkFavorite();
+
+    // Animate Score for History Mode immediately
+    if (logData) animateScore(target);
+
+  }, [imageUri, logData]);
+
+  // Clean animation helper
+  const scoreInterval = useRef(null);
+
+  const animateScore = (target) => {
+    if (scoreInterval.current) clearInterval(scoreInterval.current);
+
+    let current = 0;
+    scoreInterval.current = setInterval(() => {
+      if (current >= target) {
+        if (scoreInterval.current) clearInterval(scoreInterval.current);
+        setAnimatedScore(target);
+      } else {
+        current += 2;
+        // Clamp to target
+        if (current > target) current = target;
+        setAnimatedScore(current);
+      }
+    }, 20);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scoreInterval.current) clearInterval(scoreInterval.current);
+    };
+  }, []);
+
+  const checkFavorite = async () => {
+    const user = auth.currentUser;
+    if (user && productName) {
+      const favRef = ref(database, `users/${user.uid}/favorites/${productName.replace(/[.#$[\]]/g, "")}`);
+      const snap = await get(favRef);
+      if (snap.exists()) setIsFavorite(true);
+    }
+  };
 
   const processImage = async (uri) => {
     setLoading(true);
     try {
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-
-      // Get User Settings
       const user = auth.currentUser;
       let userProfile = { vegType: 'Vegetarian', goal: 'General Health' };
 
@@ -48,296 +111,389 @@ export default function ResultScreen({ route, navigation }) {
         const snapshot = await get(ref(database, `users/${user.uid}/settings`));
         if (snapshot.exists()) {
           const s = snapshot.val();
-          const diet = s.diet ? (Array.isArray(s.diet) ? s.diet.join(', ') : s.diet) : 'Vegetarian';
           userProfile = {
-            vegType: diet,
+            vegType: s.diet ? (Array.isArray(s.diet) ? s.diet.join(', ') : s.diet) : 'Vegetarian',
             goal: s.goal || 'General Health'
           };
         }
       }
 
       const data = await analyzeImageWithGemini(base64, userProfile);
-
       if (data) {
         setAnalysis(data);
         if (data.productName) setProductName(data.productName);
+        animateScore(data.healthScore || 0);
       }
     } catch (error) {
-      console.error("Process Image Error:", error);
-      if (error.message.includes('429')) {
-        Alert.alert('Quota Exceeded', 'You are scanning too fast! Please wait a moment and try again.');
-      } else {
-        Alert.alert('Error', 'Could not analyze image. Please try again. \n' + error.message);
-      }
+      Alert.alert('Error', 'Could not analyze image: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const toggleFavorite = async () => {
+    const user = auth.currentUser;
+    if (!user || !productName) return;
+
+    const safeName = productName.replace(/[.#$[\]]/g, "");
+    const favRef = ref(database, `users/${user.uid}/favorites/${safeName}`);
+
+    if (isFavorite) {
+      await remove(favRef);
+      setIsFavorite(false);
+    } else {
+      await update(ref(database, `users/${user.uid}/favorites`), {
+        [safeName]: { productName, calories: analysis.calories, protein: analysis.protein, timestamp: serverTimestamp() }
+      });
+      setIsFavorite(true);
+    }
+  };
+
   const saveToLog = async () => {
+    if (loading) return;
+
     if (!analysis || !productName.trim()) {
       Alert.alert('Required', 'Please enter a product name');
       return;
     }
 
+    setLoading(true);
+
     try {
       const user = auth.currentUser;
-      if (!user) {
-        Alert.alert('Error', 'User not logged in');
-        return;
-      }
+      if (!user) return;
 
-      const logsRef = ref(database, `users/${user.uid}/foodLogs`);
-      await push(logsRef, {
-        timestamp: serverTimestamp(),
+      const entryData = {
         productName,
         ...analysis,
-        imageUri,
-      });
+        notes,
+        portions: multiplier,
+        // Recalculate totals based on multiplier for storage if needed, 
+        // OR store base values and multiplier. 
+        // Existing logic stored calculated values. Let's stick to that for consistency.
+        calories: Math.round(analysis.calories * multiplier),
+        protein: Math.round(analysis.protein * multiplier * 10) / 10,
+        carbohydrates: Math.round((analysis.carbohydrates || 0) * multiplier * 10) / 10,
+        totalFat: Math.round((analysis.totalFat || 0) * multiplier * 10) / 10,
+      };
 
-      Alert.alert('Success', 'Saved to your food log!');
-      navigation.navigate('Today');
+      if (isEditing && logData) {
+        await updateLogEntry(user.uid, logData.id, entryData);
+        Alert.alert("Updated", "Entry updated successfully");
+        navigation.goBack();
+      } else {
+        const logsRef = ref(database, `users/${user.uid}/foodLogs`);
+        const newLog = {
+          timestamp: serverTimestamp(),
+          imageUri: imageUri || null,
+          ...entryData
+        };
+        await push(logsRef, newLog);
+        await updateStreakAndAchievements(user.uid, newLog);
+
+        // Alert.alert('Success', 'Saved to your diary!');
+        navigation.navigate('Diary', { toast: 'Saved to diary!' });
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to save to Firebase.');
+      Alert.alert('Error', 'Failed to save.');
+    } finally {
+      // Small delay to prevent immediate re-press while navigating
+      setTimeout(() => setLoading(false), 500);
     }
   };
 
-  const shareResult = async () => {
-    if (!analysis) return;
-    try {
-      const message = `I just analyzed ${productName} with LabelScanner!\n\nHealth Score: ${analysis.healthScore}/100\nKey Insight: ${analysis.healthInsight}`;
-      await Share.share({ message });
-    } catch (error) {
-      Alert.alert(error.message);
-    }
+  const adjustPortion = (delta) => {
+    setMultiplier(prev => Math.max(0.5, Math.round((prev + delta) * 10) / 10));
   };
 
-  // Helper for colors
   const getScoreColor = (score) => {
-    if (score >= 75) return '#27ae60';
-    if (score >= 40) return '#f39c12';
-    return '#e74c3c';
+    if (score >= 80) return '#10b981'; // Green
+    if (score >= 60) return '#fbbf24'; // Yellow
+    if (score >= 40) return '#f59e0b'; // Orange
+    return '#ef4444'; // Red
   };
 
-  // Case 1: Accessed via Tab Bar (No Image)
-  if (!imageUri && !savedAnalysis) {
-    return (
-      <View style={styles.emptyContainer}>
-        <MaterialIcons name="qr-code-scanner" size={64} color="#ccc" />
-        <Text style={styles.emptyText}>No label scanned yet</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.navigate('Scan')}>
-          <Text style={styles.retryText}>Start Scanning</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // Tips State
+  const [loadingTip, setLoadingTip] = useState("Analyzing ingredients...");
 
-  // Case 2: Analysis Failed (Has Image)
-  if (!analysis && !loading) {
-    return (
-      <View style={styles.emptyContainer}>
-        <MaterialIcons name="broken-image" size={64} color="#ccc" />
-        <Text style={styles.emptyText}>Analysis failed</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={() => processImage(imageUri)}>
-          <Text style={styles.retryText}>Try Again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}>
-          <Text style={{ color: '#666' }}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (loading) {
+      const tips = [
+        "Did you know fiber keeps you full longer?",
+        "Protein is essential for muscle repair.",
+        "Hidden sugars often appear as 'Dextrose' or 'Syrup'.",
+        "Checking nutritional values...",
+        "Comparing against your specialized diet..."
+      ];
+      let i = 0;
+      const interval = setInterval(() => {
+        setLoadingTip(tips[i % tips.length]);
+        i++;
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [loading]);
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#208091" />
-        <Text style={styles.loadingText}>Analyzing Label...</Text>
-        <Text style={styles.loadingSubText}>This may take a few seconds</Text>
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Heading level={2} style={styles.loadingText}>Analyzing Label...</Heading>
+        <Body muted style={{ textAlign: 'center', maxWidth: 280, marginTop: 8, height: 40 }}>{loadingTip}</Body>
+      </View>
+    );
+  }
+
+  if (!analysis) {
+    return (
+      <View style={[styles.centerContainer, { backgroundColor: colors.background }]}>
+        <MaterialIcons name="error-outline" size={48} color={colors.text.muted} />
+        <Heading level={2} style={styles.loadingText}>No Data Found</Heading>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.retryBtn}>
+          <Body style={{ color: '#fff', fontWeight: 'bold' }}>Go Back</Body>
+        </TouchableOpacity>
       </View>
     );
   }
 
   const scoreColor = getScoreColor(analysis.healthScore);
 
+  // Base values for display calculation
+  // If we are in history mode, analysis already has the multipled values? 
+  // Wait, in history mode line 46: baseCalories = logData.calories / portions.
+  // So 'analysis' object holds BASE values (per 1 serving).
+  // So we multiply by 'multiplier'.
+
+  const calcVal = (val) => (val === null || val === undefined) ? null : Math.round(val * multiplier * 10) / 10;
+
+  const displayCal = (analysis.calories === null || analysis.calories === undefined) ? null : Math.round(analysis.calories * multiplier);
+  const displayProt = calcVal(analysis.protein);
+  const displayCarbs = calcVal(analysis.carbohydrates);
+  const displayFat = calcVal(analysis.totalFat);
+  const displayFiber = calcVal(analysis.fiber);
+  const displaySugar = calcVal(analysis.sugar?.labelSugar);
+
+  const MacroItem = ({ label, value, unit, color }) => (
+    <View style={[styles.macroItem, { backgroundColor: colors.surface }]}>
+      <Heading level={2} style={{ color: value !== null ? (color || colors.text.primary) : colors.text.muted, textAlign: 'center' }}>
+        {value !== null ? value : '--'}
+      </Heading>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 2 }}>
+        {value !== null && <Label style={{ fontSize: 12 }}>{unit}</Label>}
+        <Body muted style={{ fontSize: 12 }}>{label}</Body>
+      </View>
+    </View>
+  );
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#f4f6f8' }}>
+    <View style={[styles.mainContainer, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle="light-content" />
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false} bounces={false}>
 
         {/* Hero Section */}
-        <ImageBackground source={{ uri: imageUri }} style={styles.heroBackground} blurRadius={10}>
-          <LinearGradient colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)']} style={styles.heroGradient}>
-
-            {/* Header Nav */}
+        <ImageBackground source={{ uri: imageUri || logData?.imageUri }} style={styles.heroBackground}>
+          <LinearGradient colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.85)']} style={styles.heroGradient}>
             <View style={styles.headerNav}>
-              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-                <Ionicons name="arrow-back" size={24} color="#fff" />
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} activeOpacity={0.6}>
+                <Ionicons name="chevron-back" size={24} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={shareResult} style={styles.iconBtn}>
-                <Ionicons name="share-social-outline" size={24} color="#fff" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {logData && (
+                  <TouchableOpacity onPress={() => setIsEditing(!isEditing)} style={[styles.iconBtn, isEditing && { backgroundColor: colors.primary }]}>
+                    <MaterialIcons name="edit" size={20} color="#fff" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={toggleFavorite} style={styles.iconBtn}>
+                  <Ionicons
+                    name={isFavorite ? "heart" : "heart-outline"}
+                    size={24}
+                    color={isFavorite ? "#ff4757" : "#fff"}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Score Display */}
-            <View style={styles.heroContent}>
-              <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-                <Text style={[styles.scoreValue, { color: scoreColor }]}>{analysis.healthScore}</Text>
-                <Text style={styles.scoreLabel}>Health Score</Text>
-              </View>
-
-              {/* Editable Name */}
-              <View style={styles.nameContainer}>
+            <Card glass style={styles.scoreHeroCard}>
+              {/* Animated Health Score */}
+              <ProgressRing
+                progress={animatedScore}
+                size={110}
+                strokeWidth={10}
+                color={scoreColor}
+                label="HEALTH"
+              />
+              <View style={styles.nameHeader}>
                 <TextInput
-                  style={styles.nameInput}
+                  style={[styles.nameInput, isEditing && { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.3)' }]}
                   value={productName}
                   onChangeText={setProductName}
-                  placeholderTextColor="rgba(255,255,255,0.6)"
+                  placeholder="Product Name"
+                  placeholderTextColor="#ccc"
+                  editable={isEditing || !logData}
                 />
-                <MaterialIcons name="edit" size={16} color="rgba(255,255,255,0.6)" style={{ marginLeft: 8 }} />
               </View>
-
-              <View style={[styles.statusBadge, { backgroundColor: analysis.vegetarianStatus.toLowerCase().includes('non') ? '#e74c3c' : '#27ae60' }]}>
-                <Text style={styles.statusText}>{analysis.vegetarianStatus}</Text>
-              </View>
-            </View>
-
+              <Badge label={analysis.vegetarianStatus} type={analysis.vegetarianStatus?.includes('Non') ? 'error' : 'success'} />
+            </Card>
           </LinearGradient>
         </ImageBackground>
 
         <View style={styles.contentContainer}>
 
-          {/* AI Insight Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <MaterialIcons name="auto-awesome" size={24} color="#208091" />
-              <Text style={styles.cardTitle}>AI Assessment</Text>
-            </View>
-            <Text style={styles.insightText}>{analysis.healthInsight}</Text>
-          </View>
+          {/* Smart Suggestion (Alternatives Moved Up) */}
+          {analysis.alternatives?.length > 0 && (
+            <View style={styles.suggestionBlock}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <MaterialIcons name="auto-awesome" size={16} color={colors.primary} />
+                <Label style={{ color: colors.primary, fontWeight: '700' }}>SMART ALTERNATIVES</Label>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {analysis.alternatives.map((alt, i) => {
+                  // Handle "Name : Reason" format
+                  const parts = alt.split(':');
+                  const name = parts[0].trim();
+                  const reason = parts[1] ? parts[1].trim() : '';
 
-          {/* Nutrition Grid */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="nutrition" size={22} color="#208091" />
-              <Text style={styles.cardTitle}>Nutrition Facts</Text>
-            </View>
-            <View style={styles.nutritionRow}>
-              <View style={styles.nutrientBox}>
-                <Text style={styles.nutrientVal}>{analysis.calories}</Text>
-                <Text style={styles.nutrientLbl}>Calories</Text>
-              </View>
-              <View style={styles.nutrientBox}>
-                <Text style={styles.nutrientVal}>{analysis.protein}g</Text>
-                <Text style={styles.nutrientLbl}>Protein</Text>
-              </View>
-              <View style={styles.nutrientBox}>
-                <Text style={styles.nutrientVal}>{analysis.totalFat}g</Text>
-                <Text style={styles.nutrientLbl}>Fats</Text>
-              </View>
-              <View style={styles.nutrientBox}>
-                <Text style={styles.nutrientVal}>{analysis.sugar?.labelSugar || '-'}g</Text>
-                <Text style={styles.nutrientLbl}>Sugar</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Warnings Section (Dynamic) */}
-          {(analysis.preservatives?.length > 0 || analysis.additives?.length > 0 || analysis.sugar?.estimatedTotalSugar > 10) && (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <MaterialIcons name="warning" size={22} color="#e67e22" />
-                <Text style={styles.cardTitle}>Watch Out</Text>
-              </View>
-
-              {/* High Sugar Warning */}
-              {analysis.sugar?.estimatedTotalSugar > 10 && (
-                <View style={styles.warningRow}>
-                  <MaterialIcons name="subdirectory-arrow-right" size={18} color="#e74c3c" />
-                  <Text style={styles.warningText}>High Sugar Content (~{analysis.sugar.estimatedTotalSugar}g)</Text>
-                </View>
-              )}
-
-              {/* Additives */}
-              {analysis.additives?.map((item, i) => (
-                <View key={i} style={styles.warningRow}>
-                  <MaterialIcons name="science" size={18} color="#8e44ad" />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.warningText}>{item.name}</Text>
-                    <Text style={styles.warningSub}>{item.concern}</Text>
-                  </View>
-                </View>
-              ))}
+                  return (
+                    <View key={i} style={[styles.altChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <Body style={{ fontSize: 13, fontWeight: '700', color: colors.text.primary }}>{name}</Body>
+                      {reason ? <Label style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>{reason}</Label> : null}
+                    </View>
+                  );
+                })}
+              </ScrollView>
             </View>
           )}
 
-          {/* Save Button (Only if not already saved) */}
-          {!savedAnalysis && (
-            <TouchableOpacity style={styles.saveBtn} onPress={saveToLog}>
-              <LinearGradient colors={['#208091', '#16a085']} style={styles.saveGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                <Text style={styles.saveBtnText}>Save to Diary</Text>
-                <MaterialIcons name="check" size={20} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
+          {/* Portion Control (Stepper) */}
+          <View style={styles.portionSection}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Heading level={3}>Portion Size</Heading>
+            </View>
+            <View style={[styles.stepperContainer, { backgroundColor: colors.inputBackground }]}>
+              <TouchableOpacity onPress={() => adjustPortion(-0.5)} style={[styles.stepperBtn, { backgroundColor: colors.surface }]}>
+                <MaterialIcons name="remove" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+              <View style={{ alignItems: 'center' }}>
+                <Heading level={2} style={{ color: colors.primary }}>x{multiplier}</Heading>
+                <Label muted style={{ marginTop: 2 }}>{analysis.servingDescription || 'Serving'}</Label>
+              </View>
+              <TouchableOpacity onPress={() => adjustPortion(0.5)} style={[styles.stepperBtn, { backgroundColor: colors.surface }]}>
+                <MaterialIcons name="add" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Macros 2x2 Grid */}
+          <View style={styles.macrosGrid}>
+            <MacroItem label="Calories" value={displayCal} unit="kcal" color={colors.text.primary} />
+            <MacroItem label="Protein" value={displayProt} unit="g" color="#f97316" />
+            <MacroItem label="Carbs" value={displayCarbs} unit="g" color="#3b82f6" />
+            <MacroItem label="Fats" value={displayFat} unit="g" color="#eab308" />
+          </View>
+
+          {/* Detailed Stats Row */}
+          <View style={[styles.detailsRow, { borderColor: colors.border }]}>
+            <View style={{ alignItems: 'center' }}>
+              <Label muted>Fiber</Label>
+              <Body style={{ fontWeight: '600' }}>{displayFiber !== null ? `${displayFiber}g` : '--'}</Body>
+            </View>
+            <View style={{ width: 1, height: 20, backgroundColor: colors.border }} />
+            <View style={{ alignItems: 'center' }}>
+              <Label muted>Sugar</Label>
+              <Body style={{ fontWeight: '600' }}>{displaySugar !== null ? `${displaySugar}g` : '--'}</Body>
+            </View>
+            <View style={{ width: 1, height: 20, backgroundColor: colors.border }} />
+            <View style={{ alignItems: 'center' }}>
+              <Label muted>Score</Label>
+              <Body style={{ color: scoreColor, fontWeight: '800' }}>{analysis.healthScore ?? '?'}</Body>
+            </View>
+          </View>
+
+          {/* Score Explanation */}
+          {analysis.scoreExplanation && (
+            <View style={{ marginBottom: SPACING.xl, padding: 12, backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: RADIUS.md, borderColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 1 }}>
+              <Label style={{ color: COLORS.primary, fontWeight: '700', marginBottom: 4 }}>Why this score?</Label>
+              <Body style={{ fontSize: 13, color: colors.text.primary, lineHeight: 20 }}>{analysis.scoreExplanation}</Body>
+            </View>
           )}
 
+          {/* AI Verdict */}
+          <Card style={styles.verdictCard}>
+            <View style={styles.verdictHeader}>
+              <MaterialIcons name="analytics" size={18} color={colors.primary} />
+              <Heading level={3}>AI Verdict</Heading>
+            </View>
+            <Body style={{ lineHeight: 22 }}>
+              {analysis.healthInsight}
+            </Body>
+            {/* Allergens here */}
+            {analysis.allergens?.length > 0 && (
+              <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {analysis.allergens.map((a, i) => <Badge key={i} label={a} type="error" />)}
+              </View>
+            )}
+          </Card>
+
+          {/* Notes Input */}
+          {(isEditing || !logData) && (
+            <View style={styles.section}>
+              <Heading level={3} style={styles.sectionTitle}>Notes</Heading>
+              <TextInput
+                style={[styles.notesInput, { backgroundColor: colors.surface, color: colors.text.primary }]}
+                placeholder="Add notes..."
+                placeholderTextColor={colors.text.muted}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+              />
+            </View>
+          )}
+
+          <GradientButton
+            title={isEditing ? "Save Changes" : (logData ? "Add Again to Diary" : "Save to Diary")}
+            onPress={saveToLog}
+            style={{ marginTop: SPACING.md, marginBottom: 50 }}
+          />
         </View>
-        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  mainContainer: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1 },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-  emptyText: { fontSize: 16, color: '#666', marginTop: 16 },
-  retryBtn: { marginTop: 16, padding: 12, backgroundColor: '#208091', borderRadius: 8 },
-  retryText: { color: '#fff', fontWeight: '600' },
-  loadingText: { marginTop: 20, fontSize: 18, fontWeight: '600', color: '#208091' },
-  loadingSubText: { marginTop: 8, fontSize: 14, color: '#999' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
+  loadingText: { marginTop: SPACING.lg, marginBottom: 4 },
+  retryBtn: { marginTop: 20, backgroundColor: COLORS.primary, paddingHorizontal: 30, paddingVertical: 12, borderRadius: RADIUS.md },
 
-  // Hero
   heroBackground: { width: '100%', height: 380 },
-  heroGradient: { flex: 1, justifyContent: 'space-between', padding: 20, paddingBottom: 40 },
-  headerNav: { marginTop: 40, flexDirection: 'row', justifyContent: 'space-between' },
-  iconBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20 },
+  heroGradient: { flex: 1, padding: SPACING.lg, justifyContent: 'space-between' },
+  headerNav: { marginTop: 50, flexDirection: 'row', justifyContent: 'space-between' },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
 
-  heroContent: { alignItems: 'center' },
-  scoreCircle: {
-    width: 120, height: 120, borderRadius: 60, backgroundColor: '#fff',
-    justifyContent: 'center', alignItems: 'center', borderWidth: 6, marginBottom: 16,
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, elevation: 10
-  },
-  scoreValue: { fontSize: 42, fontWeight: '800' },
-  scoreLabel: { fontSize: 10, color: '#777', textTransform: 'uppercase', marginTop: 0 },
+  scoreHeroCard: { alignItems: 'center', paddingVertical: SPACING.lg, marginTop: 'auto' },
+  nameHeader: { marginTop: 10, marginBottom: 8, width: '100%' },
+  nameInput: { fontSize: 24, fontWeight: '800', color: '#fff', textAlign: 'center' },
 
-  nameContainer: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.3)', paddingBottom: 8, marginBottom: 12 },
-  nameInput: { fontSize: 22, fontWeight: '700', color: '#fff', textAlign: 'center', minWidth: 100 },
+  contentContainer: { padding: SPACING.lg, marginTop: -10 },
 
-  statusBadge: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  statusText: { color: '#fff', fontWeight: '700', fontSize: 12, textTransform: 'uppercase' },
+  suggestionBlock: { marginBottom: SPACING.xl },
+  altChip: { marginRight: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.full, borderWidth: 1 },
 
-  // Content
-  contentContainer: { padding: 20, marginTop: -30 },
-  card: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 16,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
-  insightText: { fontSize: 14, color: '#444', lineHeight: 22 },
+  portionSection: { marginBottom: SPACING.xl },
+  stepperContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 8, borderRadius: RADIUS.lg },
+  stepperBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', ...SHADOWS.soft },
 
-  nutritionRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  nutrientBox: { alignItems: 'center', flex: 1 },
-  nutrientVal: { fontSize: 18, fontWeight: '700', color: '#208091' },
-  nutrientLbl: { fontSize: 12, color: '#888', marginTop: 4 },
+  macrosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: SPACING.xl },
+  macroItem: { width: '48%', aspectRatio: 1.4, borderRadius: RADIUS.lg, justifyContent: 'center', alignItems: 'center', ...SHADOWS.soft },
 
-  warningRow: { flexDirection: 'row', gap: 12, marginTop: 12, alignItems: 'flex-start' },
-  warningText: { fontSize: 14, color: '#c0392b', fontWeight: '600' },
-  warningSub: { fontSize: 12, color: '#7f8c8d' },
+  detailsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, marginBottom: SPACING.xl },
 
-  saveBtn: { borderRadius: 16, overflow: 'hidden', marginTop: 8 },
-  saveGradient: { padding: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
-  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
+  verdictCard: { padding: SPACING.md, marginBottom: SPACING.xl },
+  verdictHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+
+  section: { marginBottom: SPACING.xl },
+  sectionTitle: { marginBottom: SPACING.md },
+  notesInput: { padding: SPACING.md, borderRadius: RADIUS.md, fontSize: 15, minHeight: 80, textAlignVertical: 'top' }
 });

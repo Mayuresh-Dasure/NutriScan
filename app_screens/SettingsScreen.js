@@ -1,18 +1,22 @@
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { signOut } from 'firebase/auth';
 import { onValue, ref, update } from 'firebase/database';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { COLORS, RADIUS, SHADOWS, SPACING } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 import { auth, database } from '../services/firebaseConfig';
 
 const DIET_TYPES = ['Vegetarian', 'Non-Vegetarian', 'Vegan', 'Eggetarian'];
 const HEALTH_GOALS = ['General Health', 'Weight Loss', 'Muscle Gain', 'Diabetes Control', 'Heart Health'];
 
 export default function SettingsScreen({ navigation }) {
+    const { colors, isDark, themePreference, setThemePreference } = useTheme();
     const [diet, setDiet] = useState(['Vegetarian']);
     const [goal, setGoal] = useState('General Health');
+    const [reminders, setReminders] = useState({ water: true, track: true, protein: true });
 
     // Personal Details
     const [username, setUsername] = useState('');
@@ -40,6 +44,7 @@ export default function SettingsScreen({ navigation }) {
                     if (data.gender) setGender(data.gender);
                     if (data.username) setUsername(data.username);
                     if (data.profilePic) setProfilePic(data.profilePic);
+                    if (data.reminders) setReminders(data.reminders);
                 }
                 setLoading(false);
             });
@@ -114,6 +119,16 @@ export default function SettingsScreen({ navigation }) {
         }
     };
 
+    const toggleReminder = (key) => {
+        const newReminders = { ...reminders, [key]: !reminders[key] };
+        setReminders(newReminders);
+
+        const user = auth.currentUser;
+        if (user) {
+            update(ref(database, `users/${user.uid}/settings`), { reminders: newReminders });
+        }
+    };
+
     const saveSetting = async (key, value) => {
         let newValue;
         if (key === 'diet') {
@@ -165,8 +180,8 @@ export default function SettingsScreen({ navigation }) {
     if (loading) return <View style={styles.center}><ActivityIndicator color="#208091" /></View>;
 
     const OptionGroup = ({ title, options, selected, onSelect, type }) => (
-        <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>{title}</Text>
+        <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{title}</Text>
             <View style={styles.optionsGrid}>
                 {options.map((opt) => {
                     const isSelected = type === 'diet'
@@ -176,10 +191,18 @@ export default function SettingsScreen({ navigation }) {
                     return (
                         <TouchableOpacity
                             key={opt}
-                            style={[styles.option, isSelected && styles.optionSelected]}
+                            style={[
+                                styles.option,
+                                { backgroundColor: colors.background, borderColor: colors.border },
+                                isSelected && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }
+                            ]}
                             onPress={() => saveSetting(type, opt)}
                         >
-                            <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                            <Text style={[
+                                styles.optionText,
+                                { color: colors.text.secondary },
+                                isSelected && { color: '#fff', fontWeight: '700' }
+                            ]}>
                                 {opt}
                             </Text>
                             {isSelected && <MaterialIcons name="check" size={16} color="#fff" />}
@@ -191,11 +214,34 @@ export default function SettingsScreen({ navigation }) {
     );
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+            style={[styles.container, { backgroundColor: colors.background }]}
+            contentContainerStyle={{ paddingBottom: 100 }}
+            showsVerticalScrollIndicator={false}
+        >
             <LinearGradient
                 colors={['#208091', '#16a085']}
                 style={styles.headerGradient}
             >
+                {/* Header Top Row with Back Button */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (navigation.canGoBack()) {
+                                navigation.goBack();
+                            } else {
+                                navigation.replace('Home'); // Fallback if history is lost
+                            }
+                        }}
+                        style={{ padding: 8, marginLeft: -8, borderRadius: 20 }}
+                        activeOpacity={0.6}
+                    >
+                        <Ionicons name="arrow-back" size={28} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 20, fontWeight: '700', color: '#fff', marginLeft: 8 }}>Settings</Text>
+                </View>
+
+                {/* Profile Info */}
                 <View style={styles.headerContent}>
                     <TouchableOpacity onPress={pickProfileImage} style={styles.avatarContainer}>
                         {profilePic ? (
@@ -219,41 +265,53 @@ export default function SettingsScreen({ navigation }) {
 
             <View style={styles.content}>
 
-                <View style={styles.sectionContainer}>
-                    <Text style={styles.sectionTitle}>My Profile</Text>
+                <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>My Profile</Text>
 
                     <View style={styles.inputWrapper}>
-                        <Text style={styles.label}>Display Name</Text>
+                        <Text style={[styles.label, { color: colors.text.secondary }]}>Display Name</Text>
                         <TextInput
-                            style={styles.input}
+                            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text.primary }]}
                             value={username}
                             onChangeText={setUsername}
                             placeholder="Enter your name"
-                            placeholderTextColor="#aaa"
+                            placeholderTextColor={colors.text.muted}
                         />
                     </View>
 
                     <View style={styles.inputRow}>
                         <View style={styles.inputWrapper}>
-                            <Text style={styles.label}>Age</Text>
-                            <TextInput style={styles.input} value={age} onChangeText={setAge} keyboardType="numeric" placeholder="25" placeholderTextColor="#aaa" />
+                            <Text style={[styles.label, { color: colors.text.secondary }]}>Age</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text.primary }]}
+                                value={age} onChangeText={setAge} keyboardType="numeric" placeholder="25" placeholderTextColor={colors.text.muted}
+                            />
                         </View>
                         <View style={styles.inputWrapper}>
-                            <Text style={styles.label}>Gender</Text>
-                            <TouchableOpacity style={styles.genderToggle} onPress={() => setGender(gender === 'Male' ? 'Female' : 'Male')}>
-                                <Text style={styles.genderText}>{gender}</Text>
-                                <MaterialIcons name={gender === 'Male' ? 'male' : 'female'} size={20} color="#208091" />
+                            <Text style={[styles.label, { color: colors.text.secondary }]}>Gender</Text>
+                            <TouchableOpacity
+                                style={[styles.genderToggle, { backgroundColor: colors.background, borderColor: colors.border }]}
+                                onPress={() => setGender(gender === 'Male' ? 'Female' : 'Male')}
+                            >
+                                <Text style={[styles.genderText, { color: colors.text.primary }]}>{gender}</Text>
+                                <MaterialIcons name={gender === 'Male' ? 'male' : 'female'} size={20} color={COLORS.primary} />
                             </TouchableOpacity>
                         </View>
                     </View>
                     <View style={styles.inputRow}>
                         <View style={styles.inputWrapper}>
-                            <Text style={styles.label}>Weight (kg)</Text>
-                            <TextInput style={styles.input} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="70" placeholderTextColor="#aaa" />
+                            <Text style={[styles.label, { color: colors.text.secondary }]}>Weight (kg)</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text.primary }]}
+                                value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="70" placeholderTextColor={colors.text.muted}
+                            />
                         </View>
                         <View style={styles.inputWrapper}>
-                            <Text style={styles.label}>Height (cm)</Text>
-                            <TextInput style={styles.input} value={height} onChangeText={setHeight} keyboardType="numeric" placeholder="175" placeholderTextColor="#aaa" />
+                            <Text style={[styles.label, { color: colors.text.secondary }]}>Height (cm)</Text>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text.primary }]}
+                                value={height} onChangeText={setHeight} keyboardType="numeric" placeholder="175" placeholderTextColor={colors.text.muted}
+                            />
                         </View>
                     </View>
                 </View>
@@ -283,17 +341,77 @@ export default function SettingsScreen({ navigation }) {
                     </LinearGradient>
                 </TouchableOpacity>
 
+
+                {/* Smart Reminders */}
+                <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Smart Reminders</Text>
+                    <View style={{ gap: 0 }}>
+                        {[
+                            { id: 'water', label: 'Drink Water', icon: 'local-drink' },
+                            { id: 'track', label: 'Track Meals', icon: 'restaurant' },
+                            { id: 'protein', label: 'Protein Target', icon: 'fitness-center' }
+                        ].map((item, index) => {
+                            const isEnabled = reminders[item.id];
+                            return (
+                                <View key={item.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: index === 2 ? 0 : 1, borderBottomColor: isDark ? '#333' : '#f0f2f5' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <MaterialIcons name={item.icon} size={20} color={COLORS.primary} />
+                                        <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: '500', color: colors.text.primary }}>{item.label}</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={{ width: 40, height: 22, borderRadius: 11, backgroundColor: isEnabled ? COLORS.primary : (isDark ? '#444' : '#e5e7eb'), alignItems: isEnabled ? 'flex-end' : 'flex-start', justifyContent: 'center', paddingHorizontal: 3 }}
+                                        onPress={() => toggleReminder(item.id)}
+                                    >
+                                        <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' }} />
+                                    </TouchableOpacity>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
+
+                {/* Theme Selection Section */}
+                <View style={[styles.sectionContainer, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Appearance</Text>
+                    <View style={styles.content}>
+                        <View style={styles.reminderRow}>
+                            <View style={styles.reminderLabel}>
+                                <View style={[styles.themeIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#f9fafb', borderRadius: RADIUS.full, padding: 8 }]}>
+                                    <MaterialIcons name="brightness-6" size={20} color={isDark ? '#fff' : COLORS.primary} />
+                                </View>
+                                <View style={{ marginLeft: 12 }}>
+                                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text.primary }}>Manual Dark Mode</Text>
+                                    <Text style={{ color: colors.text.muted, fontSize: 12 }}>Override system appearance</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.switch, { backgroundColor: themePreference === 'dark' ? COLORS.primary : (isDark ? '#444' : '#e5e7eb'), alignItems: themePreference === 'dark' ? 'flex-end' : 'flex-start', justifyContent: 'center', width: 40, height: 22, borderRadius: 11, paddingHorizontal: 3 }]}
+                                onPress={() => setThemePreference(themePreference === 'dark' ? 'system' : 'dark')}
+                            >
+                                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' }} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+
                 {/* About Section */}
-                <View style={[styles.sectionContainer, { marginTop: 20 }]}>
-                    <Text style={styles.sectionTitle}>About App</Text>
-                    <Text style={styles.aboutText}>
-                        LabelScanner helps you make healthier food choices by analyzing nutrition labels instantly.
+                <View style={[styles.sectionContainer, { marginTop: 0, backgroundColor: colors.surface }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>About App</Text>
+                    <Text style={[styles.aboutText, { color: colors.text.secondary }]}>
+                        NutriScanner helps you make healthier food choices by analyzing nutrition labels instantly.
                     </Text>
-                    <Text style={[styles.aboutText, { marginTop: 8, fontSize: 13, color: '#999' }]}>Version 1.0.0</Text>
+                    <Text style={[styles.aboutText, { marginTop: 8, fontSize: 13, color: colors.text.muted }]}>Version 1.0.0</Text>
                 </View>
 
                 {/* Logout Button */}
-                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                <TouchableOpacity
+                    onPress={handleLogout}
+                    style={[
+                        styles.logoutButton,
+                        { backgroundColor: colors.surface, borderColor: isDark ? colors.border : '#ffebee' }
+                    ]}
+                    activeOpacity={0.7}
+                >
                     <MaterialIcons name="logout" size={20} color="#e74c3c" />
                     <Text style={styles.logoutText}>Log Out</Text>
                 </TouchableOpacity>
@@ -305,7 +423,7 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f0f2f5' },
+    container: { flex: 1 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     headerGradient: {
         paddingTop: 60,
@@ -336,7 +454,6 @@ const styles = StyleSheet.create({
 
     content: { padding: 20, marginTop: -20 },
     sectionContainer: {
-        backgroundColor: '#fff',
         borderRadius: 20,
         padding: 20,
         marginBottom: 20,
@@ -346,39 +463,41 @@ const styles = StyleSheet.create({
         shadowRadius: 10,
         elevation: 3,
     },
-    sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 16 },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
     optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     option: {
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderRadius: 20,
-        backgroundColor: '#f8f9fa',
         borderWidth: 1,
-        borderColor: 'transparent',
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6
     },
-    optionSelected: { backgroundColor: '#208091', borderColor: '#208091' },
-    optionText: { fontSize: 14, color: '#555', fontWeight: '500' },
-    optionTextSelected: { color: '#fff', fontWeight: '700' },
+    optionText: { fontSize: 14, fontWeight: '500' },
 
     inputRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
     inputWrapper: { flex: 1, marginBottom: 16 },
-    label: { fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500' },
-    input: { backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#eee', padding: 14, borderRadius: 12, fontSize: 16, color: '#333' },
-    genderToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#eee', padding: 14, borderRadius: 12 },
-    genderText: { fontSize: 16, color: '#333' },
+    label: { fontSize: 13, marginBottom: 6, fontWeight: '500' },
+    input: { borderWidth: 1, padding: 14, borderRadius: 12, fontSize: 16 },
+    genderToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, padding: 14, borderRadius: 12 },
+    genderText: { fontSize: 16 },
 
     saveButton: { borderRadius: 16, padding: 18, alignItems: 'center', marginTop: 8 },
     saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
-    aboutText: { fontSize: 14, color: '#555', lineHeight: 20 },
+    aboutText: { fontSize: 14, lineHeight: 20 },
 
     logoutButton: {
         flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-        padding: 16, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#ffebee',
+        padding: 16, borderRadius: 16, borderWidth: 1,
         gap: 8, marginBottom: 40
     },
-    logoutText: { color: '#e74c3c', fontSize: 16, fontWeight: '700' }
+    logoutText: { color: '#e74c3c', fontSize: 16, fontWeight: '700' },
+
+    // Additional style parts for rows to avoid crashes if they were missing
+    reminderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
+    reminderLabel: { flexDirection: 'row', alignItems: 'center' },
+    switch: { justifyContent: 'center', paddingHorizontal: 3 },
+    switchDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff' }
 });
