@@ -4,66 +4,76 @@ export const analyzeImageWithGemini = async (base64Data, userProfile = { vegType
   try {
     console.log('Sending image to Gemini Service...');
     const response = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent',
       {
         contents: [
           {
             parts: [
               {
-                text: `Analyze this product's nutrition label and ingredients (from OCR or image)
-and return ONLY a valid JSON object (no markdown, no extra text).
+                text: `Analyze this image (nutrition label, medicine box, or supplement bottle) and return ONLY a valid JSON object.
+                
+FIRST, DETERMINE THE TYPE: "Food" or "Medicine".
 
-FOCUS AREAS:
-1) Sugar (per serving)
-2) Hidden sugars
-3) Preservatives
-4) Additives / colours / flavour enhancers
-5) Overall vegetarian status and health impact
-
-User profile:
-- Vegetarian type: ${userProfile.vegType}
-- Health goal: ${userProfile.goal}
-
-When writing "healthInsight", adapt it to this goal.
-
-Use this schema exactly:
-
+=== IF FOOD / BEVERAGE ===
+Focus on nutrition, ingredients, and health impact.
+Schema:
 {
-  "productName": "short name of the product",
+  "productType": "Food",
+  "productName": "short name",
   "vegetarianStatus": "Vegetarian / Non-Vegetarian / Vegan / Unclear",
-  "healthScore": "number (0-100), based on how well this product fits the user profile and goal. 100 is excellent, 0 is terrible.",
-  "healthInsight": "one sentence (max ~25 words) overall verdict for a typical Indian consumer, personalised to the user's health goal.",
-  "servingDescription": "serving size and unit if available, e.g. 30 g (1 pack)",
-  "calories": "number (kcal per serving)",
-  "protein": "number (g per serving)",
-  "totalFat": "number (g per serving)",
-  "sugar": {
-    "labelSugar": "number (g per serving as written in the nutrition table, 0 if missing)",
-    "estimatedTotalSugar": "string like '8-10' for estimated g per serving including hidden sugars",
-    "hiddenSugars": [
-      "list of ingredient names that are sugars or sugar derivatives"
-    ],
-    "sugarComment": "one short sentence about sugar risk"
-  },
-  "preservatives": [
-    {
-      "name": "e.g. Sodium benzoate",
-      "concern": "one short sentence on potential issues"
-    }
-  ],
-  "additives": [
-    {
-      "name": "e.g. MSG",
-      "concern": "one short sentence about possible effects"
-    }
-  ]
+  "healthScore": number (0-100),
+  "healthInsight": "Short punchy verdict (max 10 words)",
+  "scoreExplanation": "One clear sentence explaining the score.",
+  "servingDescription": "e.g. 1 bar, 30g",
+  "calories": number (kcal) or null,
+  "protein": number (g) or null,
+  "carbohydrates": number (g) or null,
+  "totalFat": number (g) or null,
+  "fiber": number (g) or null,
+  "sugar": { "labelSugar": number (g), "hiddenSugars": ["list"] },
+  "allergens": ["list"],
+  "alternatives": ["Name : Reason"],
+  "preservatives": [{ "name": "...", "concern": "..." }],
+  "additives": [{ "name": "...", "concern": "..." }]
 }
 
+=== IF MEDICINE / SUPPLEMENT ===
+Focus on active ingredients, usage, and safety.
+Schema:
+{
+  "productType": "Medicine",
+  "productName": "short name",
+  "vegetarianStatus": "Vegetarian / Non-Vegetarian / Vegan / Unclear",
+  "healthScore": number (0-100) (Based on safety/clarity/necessity checking. 100 = Safe/Clear, 50 = Caution),
+  "healthInsight": "Simple primary use (e.g. 'Pain Relief', 'Immunity', 'Sleep Aid'). Max 3 words.",
+  "scoreExplanation": "Explain simply in one sentence what this medicine matches/does. Use plain English, no complex medical terms. (e.g. 'Helps reduce fever and mild pain' or 'Provides Vitamin C for immune support').",
+  "activeIngredients": ["list of main drugs/vitamins e.g. 'Paracetamol 500mg'"],
+  "dosage": "Recommended dosage if visible (e.g. '1 tablet every 6 hours')",
+  "usageInstructions": "Brief usage instructions",
+  "warnings": ["Side effects or warnings e.g. 'Drowsiness', 'Take with food'"],
+  "symptoms": ["Conditions this treats"],
+  "servingDescription": null,
+  "calories": null,
+  "protein": null,
+  "carbohydrates": null,
+  "totalFat": null,
+  "fiber": null,
+  "sugar": { "labelSugar": null, "hiddenSugars": [] },
+  "allergens": [],
+  "alternatives": [],
+  "preservatives": [],
+  "additives": []
+}
+
+User Profile for Context:
+- Vegetarian Type: ${userProfile.vegType}
+- Goal: ${userProfile.goal}
+
 Rules:
-- Prefer PER SERVING values over per 100 g.
-- If a field is unknown, use a sensible default: numbers as "0" and strings as "Unknown".
-- **healthScore**: Be strict. High sugar/preservatives should lower the score significantly for weight loss/health goals.
-- Output must be ONLY the JSON.
+- Return ONLY valid JSON.
+- If unsure of type, default to Food schema but set productType="Unknown".
+- Ensure no markdown formatting or backticks.
+- FOR MEDICINE: Write the 'scoreExplanation' and 'healthInsight' in very simple, non-technical language. Explain it like I'm 12 years old.
 `,
               },
               {
