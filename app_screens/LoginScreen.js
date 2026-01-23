@@ -1,7 +1,7 @@
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { useState } from 'react';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { useState, useEffect } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,6 +14,14 @@ import {
   View,
   ActivityIndicator
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing
+} from 'react-native-reanimated';
 import { auth } from '../services/firebaseConfig'; // Ensure this path is correct based on project structure
 import { RADIUS, SPACING } from '../constants/theme';
 
@@ -22,6 +30,26 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
+
+  // Animation values
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.value = withRepeat(
+      withSequence(
+        withTiming(-10, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1, // Infinite repeat
+      true // Reverse
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: translateY.value }],
+    };
+  });
 
   // New: Inline error state
   const [errorDetails, setErrorDetails] = useState('');
@@ -47,7 +75,7 @@ export default function LoginScreen({ navigation }) {
       let msg = 'Authentication failed. Please check your connection.';
 
       if (error.code === 'auth/invalid-email') msg = 'Invalid email address format.';
-      if (error.code === 'auth/wrong-password') msg = 'Incorrect password. Try "Forgot Password"?';
+      if (error.code === 'auth/wrong-password') msg = 'Incorrect password.';
       if (error.code === 'auth/email-already-in-use') msg = 'This email is already registered. Try logging in.';
       if (error.code === 'auth/weak-password') msg = 'Password should be at least 6 characters.';
       if (error.code === 'auth/invalid-credential') msg = 'Incorrect email or password.';
@@ -60,21 +88,7 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setErrorDetails('Please enter your email to reset password.');
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(auth, email);
-      Alert.alert('Email Sent', 'Check your inbox for password reset instructions.');
-      setErrorDetails('');
-    } catch (e) {
-      console.log(e);
-      if (e.code === 'auth/user-not-found') setErrorDetails('No account found with this email.');
-      else setErrorDetails('Failed to send reset email.');
-    }
-  };
+
 
   return (
     <View style={styles.container}>
@@ -94,10 +108,10 @@ export default function LoginScreen({ navigation }) {
 
         {/* Header Section */}
         <View style={styles.header}>
-          <View style={styles.logoRow}>
-            <Ionicons name="nutrition" size={32} color="#10b981" />
+          <Animated.View style={[styles.logoRow, animatedStyle]}>
+            <Ionicons name="nutrition" size={40} color="#10b981" />
             <Text style={styles.appName}>NutriScan<Text style={{ color: '#10b981' }}>AI</Text></Text>
-          </View>
+          </Animated.View>
           <Text style={styles.headerTitle}>{isLogin ? 'Welcome Back' : 'Create Account'}</Text>
           <Text style={styles.headerSubtitle}>{isLogin ? 'Sign in to continue your healthy journey' : 'Start your personalized nutrition plan today'}</Text>
         </View>
@@ -149,11 +163,7 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           {/* Forgot Password */}
-          {isLogin && (
-            <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 8, padding: 4 }} onPress={handleForgotPassword}>
-              <Text style={styles.forgotPassText}>Forgot Password?</Text>
-            </TouchableOpacity>
-          )}
+
 
           {/* Main Action Button */}
           <TouchableOpacity
@@ -212,11 +222,13 @@ const styles = StyleSheet.create({
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16
+    gap: 12,
+    marginBottom: 20,
+    marginTop: 40, // Ensure it's not too close to top
+    paddingVertical: 10 // Add padding to avoid clipping animation
   },
   appName: {
-    fontSize: 24,
+    fontSize: 34,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: -0.5,

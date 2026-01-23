@@ -398,7 +398,7 @@ export default function SettingsScreen({ navigation }) {
                 <View style={[styles.sectionContainer, { marginTop: 0, backgroundColor: colors.surface }]}>
                     <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>About App</Text>
                     <Text style={[styles.aboutText, { color: colors.text.secondary }]}>
-                        NutriScanner helps you make healthier food choices by analyzing nutrition labels instantly.
+                        NutriScan helps you make healthier food choices by analyzing nutrition labels instantly.
                     </Text>
                     <Text style={[styles.aboutText, { marginTop: 8, fontSize: 13, color: colors.text.muted }]}>Version 1.0.0</Text>
                 </View>

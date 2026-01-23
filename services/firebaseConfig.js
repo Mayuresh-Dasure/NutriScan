@@ -1,5 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { initializeApp, getApps } from 'firebase/app';
+import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -13,10 +13,44 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
+// Log config for debugging (remove in production)
+console.log('Firebase Config Check:', {
+  hasApiKey: !!firebaseConfig.apiKey,
+  hasAuthDomain: !!firebaseConfig.authDomain,
+  hasDatabaseURL: !!firebaseConfig.databaseURL,
+  hasProjectId: !!firebaseConfig.projectId,
 });
-const database = getDatabase(app);
+
+let app;
+let auth;
+let database;
+
+try {
+  // Check if app is already initialized
+  if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApps()[0];
+  }
+
+  // Initialize Auth with persistence
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage)
+    });
+  } catch (authError) {
+    // Auth already initialized, get existing instance
+    console.log('Auth already initialized, using existing instance');
+    auth = getAuth(app);
+  }
+
+  database = getDatabase(app);
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+  // Create mock objects to prevent crash
+  app = null;
+  auth = null;
+  database = null;
+}
 
 export { app, auth, database };

@@ -2,6 +2,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { get, onValue, ref, remove, push, update, set } from 'firebase/database';
 import React, { useState, useEffect, useRef } from 'react';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { ActivityIndicator, Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, Modal, Animated, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Badge } from '../components/Badges';
 import { Card } from '../components/Card';
@@ -230,28 +231,54 @@ export default function DiaryScreen({ navigation, route }) {
                 </View>
 
                 {items.map((item, index) => (
-                    <TouchableOpacity key={index} activeOpacity={0.7} onPress={() => navigation.navigate('Result', { logData: item })}>
-                        <Card style={[styles.logCard, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}>
-                            <View style={styles.logLeft}>
-                                <View style={[styles.logIcon, { backgroundColor: `${colors.primary}15` }]}>
-                                    <Body style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>
-                                        {item.count > 1 ? `x${item.count}` : ''}
-                                    </Body>
-                                    {item.count === 1 && <MaterialIcons name="restaurant" size={16} color={colors.primary} />}
+                    <Swipeable
+                        key={`${item.ids[0]}_${index}`} // Unique key
+                        renderRightActions={(progress, dragX) => {
+                            const scale = dragX.interpolate({
+                                inputRange: [-100, 0],
+                                outputRange: [1, 0],
+                                extrapolate: 'clamp',
+                            });
+                            return (
+                                <TouchableOpacity
+                                    activeOpacity={0.6}
+                                    onPress={() => deleteLog(item.ids[item.ids.length - 1])}
+                                    style={styles.deleteAction}
+                                >
+                                    <Animated.View style={{ transform: [{ scale }] }}>
+                                        <Ionicons name="trash-outline" size={24} color="#fff" />
+                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', marginTop: 2 }}>Delete</Text>
+                                    </Animated.View>
+                                </TouchableOpacity>
+                            );
+                        }}
+                    >
+                        <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Result', { logData: item })}>
+                            <Card style={[styles.logCard, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}>
+                                <View style={styles.logLeft}>
+                                    <View style={[styles.logIcon, { backgroundColor: `${colors.primary}15` }]}>
+                                        <Body style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>
+                                            {item.count > 1 ? `x${item.count}` : ''}
+                                        </Body>
+                                        {item.count === 1 && <MaterialIcons name="restaurant" size={16} color={colors.primary} />}
+                                    </View>
+                                    <View style={{ flex: 1, paddingRight: 8 }}>
+                                        <Body
+                                            style={{ fontWeight: '600', color: colors.text.primary, lineHeight: 20 }}
+                                            numberOfLines={2}
+                                            ellipsizeMode="tail"
+                                        >
+                                            {item.productName}
+                                        </Body>
+                                        <Label style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>
+                                            {Math.round(item.totalCalories)} kcal {item.count > 1 ? `(${item.calories} ea)` : ''} • {item.protein}g P
+                                        </Label>
+                                    </View>
                                 </View>
-                                <View>
-                                    <Body style={{ fontWeight: '600', color: colors.text.primary }}>{item.productName}</Body>
-                                    <Label style={{ fontSize: 11, color: colors.text.muted }}>
-                                        {Math.round(item.totalCalories)} kcal {item.count > 1 ? `(${item.calories} ea)` : ''} • {item.protein}g P
-                                    </Label>
-                                </View>
-                            </View>
-
-                            <TouchableOpacity style={{ padding: 8 }} onPress={() => deleteLog(item.ids[item.ids.length - 1])}>
-                                <Ionicons name="trash-outline" size={18} color={colors.text.muted} />
-                            </TouchableOpacity>
-                        </Card>
-                    </TouchableOpacity>
+                                {/* Static Delete Button Removed */}
+                            </Card>
+                        </TouchableOpacity>
+                    </Swipeable>
                 ))}
             </View>
         );
@@ -528,6 +555,17 @@ const styles = StyleSheet.create({
     ctaButton: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingVertical: 16, borderRadius: 16,
+    },
+    deleteAction: {
+        backgroundColor: '#ef4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 80,
+        height: '85%', // Align with card height approx
+        marginTop: 10, // Match card margin
+        marginBottom: 10,
+        borderRadius: 16,
+        marginLeft: 8
     }
 });
 

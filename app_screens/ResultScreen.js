@@ -356,47 +356,120 @@ export default function ResultScreen({ route, navigation }) {
             </Body>
           </Card>
 
-          {/* Compact Nutrition Grid */}
-          <View style={styles.gridContainer}>
-            <MacroItem label="Calories" value={displayCal} unit="kcal" color={colors.text.primary} />
-            <MacroItem label="Protein" value={displayProt} unit="g" color={colors.primary} />
-            <MacroItem label="Fats" value={displayFat} unit="g" color="#eab308" />
-            <MacroItem label="Sugar" value={displaySugar} unit="g" color="#ef4444" />
-          </View>
+          {analysis.productType === 'Medicine' ? (
+            /* MEDICINE UI */
+            <View>
+              {/* Dosage & Usage */}
+              {(analysis.dosage || analysis.usageInstructions) && (
+                <View style={styles.section}>
+                  <Heading level={3} style={{ marginBottom: 12 }}>Usage & Dosage</Heading>
+                  <Card style={{ padding: 16 }}>
+                    {analysis.dosage && (
+                      <View style={{ marginBottom: 12 }}>
+                        <Label muted>Recommended Dosage</Label>
+                        <Body style={{ fontWeight: '600', color: colors.text.primary }}>{analysis.dosage}</Body>
+                      </View>
+                    )}
+                    {analysis.usageInstructions && (
+                      <View>
+                        <Label muted>Instructions</Label>
+                        <Body style={{ color: colors.text.primary }}>{analysis.usageInstructions}</Body>
+                      </View>
+                    )}
+                  </Card>
+                </View>
+              )}
 
-          {/* Watch Out Section */}
-          {risks.length > 0 && (
-            <View style={styles.watchOutSection}>
-              <Heading level={3} style={{ marginBottom: 12 }}>Watch Out</Heading>
-              {risks.map((risk, i) => (
-                <View key={i} style={[styles.riskRow, { backgroundColor: colors.surface }]}>
-                  <View style={[styles.riskIconBox, { backgroundColor: '#fee2e2' }]}>
-                    <MaterialIcons name={risk.icon} size={20} color="#ef4444" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Body style={{ fontWeight: '700', color: colors.text.primary }}>{risk.name}</Body>
-                    <Label muted>{risk.concern}</Label>
+              {/* Active Ingredients */}
+              {analysis.activeIngredients?.length > 0 && (
+                <View style={styles.section}>
+                  <Heading level={3} style={{ marginBottom: 12 }}>Active Ingredients</Heading>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {analysis.activeIngredients.map((ing, i) => (
+                      <View key={i} style={[styles.altChip, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
+                        <Body style={{ fontWeight: '600', color: colors.primary }}>{ing}</Body>
+                      </View>
+                    ))}
                   </View>
                 </View>
-              ))}
-            </View>
-          )}
+              )}
 
-          {/* Smart Alternatives (if any) - keeping as backup but less prominent if requested, or just below Watch Out */}
-          {analysis.alternatives?.length > 0 && (
-            <View style={styles.section}>
-              <Heading level={3} style={{ marginBottom: 12 }}>Better Alternatives</Heading>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {analysis.alternatives.map((alt, i) => {
-                  const parts = alt.split(':');
-                  const name = parts[0].trim();
-                  return (
-                    <View key={i} style={[styles.altChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <Body style={{ fontSize: 13, fontWeight: '700' }}>{name}</Body>
+              {/* Warnings / Symptoms */}
+              {(analysis.warnings?.length > 0 || analysis.symptoms?.length > 0) && (
+                <View style={styles.watchOutSection}>
+                  <Heading level={3} style={{ marginBottom: 12 }}>Important Info</Heading>
+
+                  {analysis.symptoms?.map((sym, i) => (
+                    <View key={`sym-${i}`} style={[styles.riskRow, { backgroundColor: colors.surface }]}>
+                      <View style={[styles.riskIconBox, { backgroundColor: '#dbeafe' }]}>
+                        <MaterialIcons name="healing" size={20} color="#3b82f6" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Body style={{ fontWeight: '700', color: colors.text.primary }}>Treats: {sym}</Body>
+                      </View>
                     </View>
-                  );
-                })}
-              </ScrollView>
+                  ))}
+
+                  {analysis.warnings?.map((warn, i) => (
+                    <View key={`warn-${i}`} style={[styles.riskRow, { backgroundColor: colors.surface }]}>
+                      <View style={[styles.riskIconBox, { backgroundColor: '#fee2e2' }]}>
+                        <MaterialIcons name="warning" size={20} color="#ef4444" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Body style={{ fontWeight: '700', color: colors.text.primary }}>Warning</Body>
+                        <Label muted>{warn}</Label>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            /* FOOD UI */
+            <View>
+              {/* Compact Nutrition Grid */}
+              <View style={styles.gridContainer}>
+                <MacroItem label="Calories" value={displayCal} unit="kcal" color={colors.text.primary} />
+                <MacroItem label="Protein" value={displayProt} unit="g" color={colors.primary} />
+                <MacroItem label="Fats" value={displayFat} unit="g" color="#eab308" />
+                <MacroItem label="Sugar" value={displaySugar} unit="g" color="#ef4444" />
+              </View>
+
+              {/* Watch Out Section */}
+              {risks.length > 0 && (
+                <View style={styles.watchOutSection}>
+                  <Heading level={3} style={{ marginBottom: 12 }}>Watch Out</Heading>
+                  {risks.map((risk, i) => (
+                    <View key={i} style={[styles.riskRow, { backgroundColor: colors.surface }]}>
+                      <View style={[styles.riskIconBox, { backgroundColor: '#fee2e2' }]}>
+                        <MaterialIcons name={risk.icon} size={20} color="#ef4444" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Body style={{ fontWeight: '700', color: colors.text.primary }}>{risk.name}</Body>
+                        <Label muted>{risk.concern}</Label>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Smart Alternatives */}
+              {analysis.alternatives?.length > 0 && (
+                <View style={styles.section}>
+                  <Heading level={3} style={{ marginBottom: 12 }}>Better Alternatives</Heading>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {analysis.alternatives.map((alt, i) => {
+                      const parts = alt.split(':');
+                      const name = parts[0].trim();
+                      return (
+                        <View key={i} style={[styles.altChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                          <Body style={{ fontSize: 13, fontWeight: '700' }}>{name}</Body>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
             </View>
           )}
 

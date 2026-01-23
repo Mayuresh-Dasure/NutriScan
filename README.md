@@ -1,14 +1,16 @@
-# 🥗 NutriScanner
+# 🥗 NutriScan
 > **Know What You Eat, Instantly.**
 
+[![Download APK](https://img.shields.io/badge/Download-APK-00C853?style=for-the-badge&logo=android&logoColor=white)](https://expo.dev/accounts/satyammah/projects/nutriscanner/builds/f6b088c8-9fe1-4b41-b296-33108b7b01a0)
+
 [![Built with Expo](https://img.shields.io/badge/Built%20with-Expo-000.svg?style=flat&logo=expo&logoColor=white)](https://expo.dev/)
-[![Powered by Gemini](https://img.shields.io/badge/AI-Google%20Gemini%202.0-8E75B2.svg?style=flat&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
+[![Powered by Gemini](https://img.shields.io/badge/AI-Google%20Gemini%203.0-8E75B2.svg?style=flat&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
 [![Firebase](https://img.shields.io/badge/Backend-Firebase-FFCA28.svg?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com/)
 
 ---
 
 ## 🚀 Overview
-**NutriScanner** is an AI-powered mobile assistant that helps you decode complex food labels in seconds. By simply snapping a photo, our app uses **Google's Gemini 3.0 Flash** model to analyze ingredients, identify hidden sugars or allergens, and provide a personalized **Health Score**.
+**NutriScan** is an AI-powered mobile assistant that helps you decode complex food labels in seconds. By simply snapping a photo, our app uses **Google's Gemini 3.0 Flash** model to analyze ingredients, identify hidden sugars or allergens, and provide a personalized **Health Score**.
 
 Built for **GDG TechSprint**, this project bridges the gap between complex nutritional data and everyday consumer choices.
 
@@ -18,7 +20,7 @@ Built for **GDG TechSprint**, this project bridges the gap between complex nutri
 *   **Dietary Anxiety:** Vegetarians and Vegans struggle to trust products with vague labeling.
 
 ## 💡 The Solution
-NutriScanner acts as your personal nutritionist.
+NutriScan acts as your personal nutritionist.
 1.  **Scan:** Point your camera at any food packet.
 2.  **Process:** The app sends the image to **Gemini AI**, which "reads" the text using advanced OCR and understands context.
 3.  **Result:** You get a simple **Health Score (0-100)**, a clear **Veg/Non-Veg verdict**, and a breakdown of **Additives & Allergens**.
@@ -30,7 +32,7 @@ NutriScanner acts as your personal nutritionist.
 *   🥦 **Smart Classification**: Instantly knows if it's Veg, Non-Veg, or Vegan.
 *   ❤️ **Health Score**: A 0-100 rating based on *your* profile (General Health, Muscle Gain, etc.).
 *   ⚠️ **Smart Warnings**: Alerts for hidden sugars, preservatives, and allergens.
-*   📜 **Scan History**: Keep a diary of everything you've scanned.
+*   📜 **Scan History**: Keep a diary of everything you've scanned (Delete with a swipe!).
 
 ---
 
@@ -40,7 +42,7 @@ This project leverages a modern, serverless architecture:
 | Component | Technology | Role |
 | :--- | :--- | :--- |
 | **Frontend** | **React Native (Expo)** | Cross-platform mobile UI |
-| **AI Brain** | **Google Gemini 2.0 Flash** | OCR, analysis, and scoring logic |
+| **AI Brain** | **Google Gemini 3.0 Flash** | OCR, analysis, and scoring logic |
 | **Backend** | **Firebase** | Authentication & Realtime Database |
 | **Networking** | **Axios** | API communication |
 
@@ -96,4 +98,4 @@ Got ideas? We'd love to hear them!
 
 ---
 
-> **Note for Judges:** This app was built to demonstrate the power of **multimodal AI (Gemini 2.0)** in solving real-world consumer problems.
+> **Note for Judges:** This app was built to demonstrate the power of **multimodal AI (Gemini 3.0)** in solving real-world consumer problems.

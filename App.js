@@ -61,6 +61,13 @@ function RootNavigator() {
   const { theme, colors, isDark } = useTheme();
 
   useEffect(() => {
+    // Guard against null auth when Firebase fails to initialize
+    if (!auth) {
+      console.error('Firebase auth is not initialized');
+      setLoading(false);
+      return;
+    }
+
     const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (!currentUser) {
@@ -74,18 +81,28 @@ function RootNavigator() {
 
   useEffect(() => {
     if (user) {
+      // BYPASS ONBOARDING CHECK
+      console.log('DEBUG: Onboarding check bypassed by user request.');
+      setOnboardingComplete(true);
+      setLoading(false);
+
+      /* 
       const settingsRef = ref(database, `users/${user.uid}/settings`);
       const unsubSettings = onValue(settingsRef, (snapshot) => {
         const data = snapshot.val();
+        console.log('DEBUG: User Settings Data:', data); // Debugging line
         // Check for ANY sign of completion (flag, diet, or limits) to unblock existing users
         if (data && (data.onboardingComplete === true || data.diet || data.calculatedLimits)) {
+          console.log('DEBUG: Onboarding COMPLETE');
           setOnboardingComplete(true);
         } else {
+          console.log('DEBUG: Onboarding INCOMPLETE - Redirecting to Onboarding');
           setOnboardingComplete(false);
         }
         setLoading(false);
       });
       return unsubSettings;
+      */
     }
   }, [user]);
 
