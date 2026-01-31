@@ -1,6 +1,5 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { get, push, ref, remove, serverTimestamp, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
@@ -33,6 +32,7 @@ import { updateLogEntry } from '../services/logService';
 export default function ResultScreen({ route, navigation }) {
   const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [multiplier, setMultiplier] = useState(1);
   const [analysis, setAnalysis] = useState(null);
   const [productName, setProductName] = useState('');
@@ -157,12 +157,12 @@ export default function ResultScreen({ route, navigation }) {
   };
 
   const saveToLog = async () => {
-    if (loading) return;
+    if (isSaving) return;
     if (!analysis || !productName.trim()) {
       Alert.alert('Required', 'Please enter a product name');
       return;
     }
-    setLoading(true);
+    setIsSaving(true);
     try {
       const user = auth.currentUser;
       if (!user) return;
@@ -196,7 +196,7 @@ export default function ResultScreen({ route, navigation }) {
     } catch (error) {
       Alert.alert('Error', 'Failed to save.');
     } finally {
-      setTimeout(() => setLoading(false), 500);
+      setTimeout(() => setIsSaving(false), 500);
     }
   };
 
@@ -314,37 +314,18 @@ export default function ResultScreen({ route, navigation }) {
             </View>
 
             <View style={styles.centeredHeaderContent}>
+              {/* Health Score Focus */}
               <View style={styles.scoreWrapper}>
                 <ProgressRing
                   progress={animatedScore}
-                  size={140}
-                  strokeWidth={12}
+                  size={160}
+                  strokeWidth={14}
                   color={scoreColor}
                   hideLegend={true}
                 />
                 <View style={styles.scoreTextOverlay}>
-                  <Heading style={{ fontSize: 42, color: '#fff', includeFontPadding: false }}>{animatedScore}</Heading>
-                  <Label style={{ color: '#fff', opacity: 0.8 }}>HEALTH</Label>
-                </View>
-              </View>
-
-              {/* Placed Product Image */}
-              <View style={[styles.imageContainer, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
-                {imageUri || logData?.imageUri || logData?.imageUrl || analysis?.imageUrl ? (
-                  <Image
-                    source={{ uri: imageUri || logData?.imageUri || analysis?.imageUrl || logData?.imageUrl }}
-                    style={styles.productImage}
-                    contentFit="cover"
-                    transition={300}
-                  />
-                ) : (
-                  <View style={styles.placeholderIconContainer}>
-                    <MaterialIcons name="image-not-supported" size={32} color="rgba(255,255,255,0.3)" />
-                  </View>
-                )}
-                <View style={styles.scannedBadge}>
-                  <MaterialIcons name="qr-code-scanner" size={12} color="#fff" />
-                  <Label style={{ color: '#fff', fontSize: 8, fontWeight: '800', marginLeft: 4 }}>SCANNED</Label>
+                  <Heading style={{ fontSize: 48, color: '#fff', includeFontPadding: false }}>{animatedScore}</Heading>
+                  <Label style={{ color: '#fff', opacity: 0.8, fontSize: 14 }}>HEALTH</Label>
                 </View>
               </View>
 
@@ -561,6 +542,7 @@ export default function ResultScreen({ route, navigation }) {
         <GradientButton
           title={isEditing ? "Save Changes" : "Save to Diary"}
           onPress={saveToLog}
+          loading={isSaving}
         />
       </View>
 
@@ -580,50 +562,17 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: SPACING.lg, marginBottom: 4 },
   retryBtn: { marginTop: 20, backgroundColor: COLORS.primary, paddingHorizontal: 30, paddingVertical: 12, borderRadius: RADIUS.md },
 
-  headerBackground: { width: '100%', height: 420 },
-  headerOverlay: { flex: 1, paddingTop: 50, paddingHorizontal: SPACING.lg },
+  headerBackground: { width: '100%', height: 400 },
+  headerOverlay: { flex: 1, paddingTop: 60, paddingHorizontal: SPACING.lg },
   headerNav: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
 
-  centeredHeaderContent: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingBottom: 40 },
-  scoreWrapper: { position: 'relative', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  centeredHeaderContent: { alignItems: 'center', flex: 1, paddingBottom: 20, paddingTop: 20 },
+  scoreWrapper: { position: 'relative', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg },
   scoreTextOverlay: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
 
-  productTitleBlock: { alignItems: 'center', width: '100%' },
+  productTitleBlock: { alignItems: 'center', width: '100%', marginTop: 20 },
   nameInput: { fontSize: 24, fontWeight: '800', color: '#fff', textAlign: 'center', width: '90%' },
-
-  imageContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 6,
-    marginBottom: 20,
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...SHADOWS.medium
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 18,
-  },
-  placeholderIconContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scannedBadge: {
-    position: 'absolute',
-    bottom: -8,
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    ...SHADOWS.soft
-  },
 
   bodyContent: { marginTop: -20, paddingHorizontal: SPACING.lg, paddingBottom: 20 },
 
