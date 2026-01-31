@@ -285,8 +285,9 @@ export default function ResultScreen({ route, navigation }) {
 
         {/* New Header */}
         <ImageBackground
-          source={{ uri: imageUri || logData?.imageUri }}
-          style={styles.headerBackground}
+          source={{ uri: imageUri || logData?.imageUri || logData?.imageUrl || analysis?.imageUrl }}
+          style={[styles.headerBackground, { backgroundColor: colors.surface }]}
+          resizeMode="cover"
           blurRadius={15}
         >
           <LinearGradient colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)']} style={styles.headerOverlay}>
