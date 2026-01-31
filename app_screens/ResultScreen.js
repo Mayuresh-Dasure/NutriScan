@@ -1,5 +1,6 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { get, push, ref, remove, serverTimestamp, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
@@ -13,8 +14,9 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+
 import { Badge } from '../components/Badges';
 import { Card } from '../components/Card';
 import { GradientButton } from '../components/GradientButton';
@@ -325,6 +327,26 @@ export default function ResultScreen({ route, navigation }) {
                 </View>
               </View>
 
+              {/* Placed Product Image */}
+              <View style={[styles.imageContainer, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
+                {imageUri || logData?.imageUri ? (
+                  <Image
+                    source={{ uri: imageUri || logData?.imageUri }}
+                    style={styles.productImage}
+                    contentFit="cover"
+                    transition={300}
+                  />
+                ) : (
+                  <View style={styles.placeholderIconContainer}>
+                    <MaterialIcons name="image-not-supported" size={32} color="rgba(255,255,255,0.3)" />
+                  </View>
+                )}
+                <View style={styles.scannedBadge}>
+                  <MaterialIcons name="qr-code-scanner" size={12} color="#fff" />
+                  <Label style={{ color: '#fff', fontSize: 8, fontWeight: '800', marginLeft: 4 }}>SCANNED</Label>
+                </View>
+              </View>
+
               <View style={styles.productTitleBlock}>
                 <TextInput
                   style={[styles.nameInput, isEditing && { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.3)' }]}
@@ -568,6 +590,39 @@ const styles = StyleSheet.create({
 
   productTitleBlock: { alignItems: 'center', width: '100%' },
   nameInput: { fontSize: 24, fontWeight: '800', color: '#fff', textAlign: 'center', width: '90%' },
+
+  imageContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 6,
+    marginBottom: 20,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.medium
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+  },
+  placeholderIconContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannedBadge: {
+    position: 'absolute',
+    bottom: -8,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    ...SHADOWS.soft
+  },
 
   bodyContent: { marginTop: -20, paddingHorizontal: SPACING.lg, paddingBottom: 20 },
 

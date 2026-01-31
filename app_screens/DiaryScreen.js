@@ -1,14 +1,15 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { get, onValue, ref, remove, push, update, set } from 'firebase/database';
-import React, { useState, useEffect, useRef } from 'react';
+import { Image } from 'expo-image';
+import { get, push, ref, remove } from 'firebase/database';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { ActivityIndicator, Image, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View, Modal, Animated, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { Badge } from '../components/Badges';
+
 import { Card } from '../components/Card';
-import { ProgressBar, ProgressRing } from '../components/Progress';
+import { ProgressBar } from '../components/Progress';
 import { Body, Heading, Label } from '../components/Typography';
-import { COLORS, RADIUS, SHADOWS, SPACING } from '../constants/theme';
+import { SHADOWS, SPACING } from '../constants/theme';
 import { useTheme } from '../context/ThemeContext';
 import { auth, database } from '../services/firebaseConfig';
 
@@ -218,6 +219,13 @@ export default function DiaryScreen({ navigation, route }) {
         const items = groupDuplicates(rawItems);
         const groupCals = rawItems.reduce((acc, curr) => acc + (parseFloat(curr.calories) || 0), 0);
 
+        const NutrientItem = ({ label, value, color }) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginRight: 4 }} />
+                <Label style={{ fontSize: 11, color: colors.text.muted }}>{label}: {value}</Label>
+            </View>
+        );
+
         return (
             <View style={styles.mealGroup} key={title}>
                 <View style={styles.groupHeader}>
@@ -254,28 +262,63 @@ export default function DiaryScreen({ navigation, route }) {
                         }}
                     >
                         <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Result', { logData: item })}>
-                            <Card style={[styles.logCard, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}>
-                                <View style={styles.logLeft}>
-                                    <View style={[styles.logIcon, { backgroundColor: `${colors.primary}15` }]}>
-                                        <Body style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>
-                                            {item.count > 1 ? `x${item.count}` : ''}
-                                        </Body>
-                                        {item.count === 1 && <MaterialIcons name="restaurant" size={16} color={colors.primary} />}
+                            <Card style={[styles.logCard, { backgroundColor: colors.surface }]}>
+                                <View style={styles.cardContent}>
+                                    {/* Left: Product Image Container */}
+                                    <View style={[styles.thumbnailWrapper, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
+                                        {item.imageUri ? (
+                                            <Image
+                                                source={{ uri: item.imageUri }}
+                                                style={[styles.thumbnail, { opacity: 0.95 }]}
+                                                contentFit="cover"
+                                                transition={300}
+                                            />
+                                        ) : (
+                                            <MaterialIcons name="photo-camera" size={24} color={isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'} />
+                                        )}
+
+                                        <View style={styles.scanBadge}>
+                                            <MaterialIcons name="qr-code-scanner" size={10} color="#fff" style={{ opacity: 0.5 }} />
+                                        </View>
+
+                                        {item.count > 1 && (
+                                            <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                                                <Text style={styles.countText}>x{item.count}</Text>
+                                            </View>
+                                        )}
                                     </View>
-                                    <View style={{ flex: 1, paddingRight: 8 }}>
-                                        <Body
-                                            style={{ fontWeight: '600', color: colors.text.primary, lineHeight: 20 }}
-                                            numberOfLines={2}
-                                            ellipsizeMode="tail"
-                                        >
-                                            {item.productName}
-                                        </Body>
-                                        <Label style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>
-                                            {Math.round(item.totalCalories)} kcal {item.count > 1 ? `(${item.calories} ea)` : ''} • {item.protein}g P
+
+                                    {/* Right: Info */}
+                                    <View style={styles.infoContainer}>
+                                        <View style={styles.infoHeader}>
+                                            <Body style={{ fontWeight: '700', color: colors.text.primary, flex: 1, fontSize: 15 }} numberOfLines={1}>
+                                                {item.productName}
+                                            </Body>
+                                            <Label style={{ fontSize: 10, color: colors.text.muted }}>
+                                                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </Label>
+                                        </View>
+
+                                        <Label style={{ fontSize: 11, color: colors.text.secondary, marginBottom: 6 }}>
+                                            {item.category || 'Food'} • {item.calories ? `${Math.round(item.totalCalories)} kcal` : item.usageCategory || 'General'}
                                         </Label>
+
+                                        {item.category === 'Medicine' ? (
+                                            <View style={styles.medicineTag}>
+                                                <MaterialIcons name="medical-services" size={12} color={colors.primary} />
+                                                <Label style={{ fontSize: 11, color: colors.primary, fontWeight: '700', marginLeft: 4 }} numberOfLines={1}>
+                                                    {item.indication || 'Medical Log'}
+                                                </Label>
+                                            </View>
+                                        ) : (
+                                            <View style={styles.nutrientRow}>
+                                                <NutrientItem label="P" value={`${item.protein}g`} color="#ef4444" />
+                                                <NutrientItem label="C" value={`${item.carbohydrates}g`} color="#3b82f6" />
+                                                <NutrientItem label="F" value={`${item.totalFat}g`} color="#f59e0b" />
+                                            </View>
+                                        )}
                                     </View>
                                 </View>
-                                {/* Static Delete Button Removed */}
                             </Card>
                         </TouchableOpacity>
                     </Swipeable>
@@ -516,9 +559,26 @@ const styles = StyleSheet.create({
 
     mealGroup: { marginBottom: SPACING.lg },
     groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-    logCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, marginBottom: 10, borderLeftWidth: 4, borderRadius: 8 },
-    logLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    logIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+    logCard: { padding: 12, marginBottom: 16, borderRadius: 24, ...SHADOWS.medium },
+    cardContent: { flexDirection: 'row', alignItems: 'center' },
+    thumbnailWrapper: {
+        width: 76,
+        height: 76,
+        borderRadius: 18,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 4,
+        ...SHADOWS.soft
+    },
+    thumbnail: { width: '100%', height: '100%', borderRadius: 14 },
+    scanBadge: { position: 'absolute', bottom: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.3)', padding: 2, borderRadius: 4 },
+    countBadge: { position: 'absolute', top: 4, left: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+    countText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+    infoContainer: { flex: 1, paddingLeft: 16, justifyContent: 'center' },
+    infoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 },
+    nutrientRow: { flexDirection: 'row', marginTop: 4 },
+    medicineTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
 
     // Modal Styles -> Bottom Sheet Styles
     bottomSheet: {

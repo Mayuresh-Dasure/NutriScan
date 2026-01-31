@@ -29,25 +29,49 @@ const CameraType = {
 
 export default function ScanScreen({ navigation }) {
   const { colors, isDark } = useTheme();
+  const { width, height } = Dimensions.get('window');
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(false);
   const [torch, setTorch] = useState(false);
   const [cameraType, setCameraType] = useState(CameraType.back);
   const [scanMode, setScanMode] = useState(SCAN_MODES.LABEL);
   const [guidance, setGuidance] = useState(GUIDANCE_TIPS[0]);
-  const [scanned, setScanned] = useState(false);
 
   const cameraRef = useRef(null);
   const shutterAnim = useRef(new Animated.Value(0)).current;
+  const scanAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const guidanceOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Rotate guidance every 3 seconds
+    // Laser Scan Animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+        Animated.timing(scanAnim, { toValue: 0, duration: 2500, useNativeDriver: true })
+      ])
+    ).start();
+
+    // Corner Pulse Animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 1500, useNativeDriver: true })
+      ])
+    ).start();
+  }, []);
+
+  useEffect(() => {
+    // Rotate guidance and animate opacity
     const interval = setInterval(() => {
-      setGuidance(prev => {
-        const idx = GUIDANCE_TIPS.indexOf(prev);
-        return GUIDANCE_TIPS[(idx + 1) % GUIDANCE_TIPS.length];
+      Animated.timing(guidanceOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+        setGuidance(prev => {
+          const idx = GUIDANCE_TIPS.indexOf(prev);
+          return GUIDANCE_TIPS[(idx + 1) % GUIDANCE_TIPS.length];
+        });
+        Animated.timing(guidanceOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
       });
-    }, 3000);
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -157,34 +181,61 @@ export default function ScanScreen({ navigation }) {
       {/* Shutter Animation Overlay */}
       <Animated.View style={[styles.shutterOverlay, { opacity: shutterAnim }]} />
 
-      {/* Darkened Overlay with rounded viewfinder */}
-      <View style={styles.overlayContainer}>
-        <View style={styles.overlayTop} />
-        <View style={styles.overlayMiddle}>
-          <View style={styles.overlaySide} />
-          <View style={styles.viewfinderContainer}>
-            <View style={styles.viewfinder}>
-              {/* Corners with Teal Border */}
-              <View style={styles.cornerTL} />
-              <View style={styles.cornerTR} />
-              <View style={styles.cornerBL} />
-              <View style={styles.cornerBR} />
-            </View>
-          </View>
-          <View style={styles.overlaySide} />
+      {/* Premium SVG Overlay with Rounded Aperture */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg height="100%" width="100%">
+          <Defs>
+            <Mask id="mask" x="0" y="0" height="100%" width="100%">
+              <Rect height="100%" width="100%" fill="white" />
+              <Rect
+                x={vLeft}
+                y={vTop}
+                width={vSize}
+                height={vSize}
+                rx={vRadius}
+                fill="black"
+              />
+            </Mask>
+          </Defs>
+          <Rect
+            height="100%"
+            width="100%"
+            fill="rgba(0,0,0,0.65)"
+            mask="url(#mask)"
+          />
+        </Svg>
+      </View>
+
+      {/* Viewfinder Content & Indicators */}
+      <View style={[styles.viewfinderContainer, { top: vTop, left: vLeft, width: vSize, height: vSize }]} pointerEvents="none">
+        <View style={[styles.viewfinderBase, { borderRadius: vRadius }]}>
+          {/* Vertical Laser Scan Bar */}
+          <Animated.View
+            style={[
+              styles.scanBar,
+              {
+                transform: [{
+                  translateY: scanAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, vSize + 10]
+                  })
+                }]
+              }
+            ]}
+          >
+            <ExpoLinearGradient
+              colors={[colors.primary + '00', colors.primary, colors.primary + '00']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
         </View>
         <View style={styles.overlayBottom}>
           {/* Dynamic Guidance */}
           <View style={styles.guidancePill}>
-            <MaterialIcons
-              name={scanMode === SCAN_MODES.BARCODE ? "qr-code-scanner" : "info-outline"}
-              size={16}
-              color="#fff"
-              style={{ marginRight: 6 }}
-            />
-            <Body inverse style={styles.instructionText}>
-              {scanMode === SCAN_MODES.BARCODE ? "Align barcode within frame" : guidance}
-            </Body>
+            <MaterialIcons name="info-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+            <Body inverse style={styles.instructionText}>{guidance}</Body>
           </View>
         </View>
       </View>
@@ -282,26 +333,24 @@ const styles = StyleSheet.create({
   camera: { ...StyleSheet.absoluteFillObject },
   shutterOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#fff', zIndex: 20, pointerEvents: 'none' },
 
-  overlayContainer: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
-  overlayTop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  overlayMiddle: { flexDirection: 'row', height: 280 },
-  overlaySide: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-
   viewfinderContainer: {
-    width: 280,
-    height: 280,
-    overflow: 'hidden',
-    borderRadius: RADIUS.xl,
+    position: 'absolute',
+    zIndex: 5,
   },
-  viewfinder: {
+  viewfinderBase: {
     flex: 1,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.01)', // Needed for clipping on some Android versions
+    borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: RADIUS.xl,
   },
-
-  overlayBottom: { flex: 1.5, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', paddingTop: 30 },
+  guidanceContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
 
   guidancePill: {
     flexDirection: 'row',
@@ -313,14 +362,27 @@ const styles = StyleSheet.create({
   },
   instructionText: {
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
     color: '#fff',
+    letterSpacing: 0.3,
   },
 
-  cornerTL: { position: 'absolute', top: -2, left: -2, width: 40, height: 40, borderTopWidth: 5, borderLeftWidth: 5, borderColor: COLORS.primary, borderTopLeftRadius: RADIUS.xl },
-  cornerTR: { position: 'absolute', top: -2, right: -2, width: 40, height: 40, borderTopWidth: 5, borderRightWidth: 5, borderColor: COLORS.primary, borderTopRightRadius: RADIUS.xl },
-  cornerBL: { position: 'absolute', bottom: -2, left: -2, width: 40, height: 40, borderBottomWidth: 5, borderLeftWidth: 5, borderColor: COLORS.primary, borderBottomLeftRadius: RADIUS.xl },
-  cornerBR: { position: 'absolute', bottom: -2, right: -2, width: 40, height: 40, borderBottomWidth: 5, borderRightWidth: 5, borderColor: COLORS.primary, borderBottomRightRadius: RADIUS.xl },
+  scanBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 3,
+    zIndex: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 15,
+  },
+
+  cornerTL: { position: 'absolute', top: -8, left: -8, width: 50, height: 50, borderTopWidth: 5, borderLeftWidth: 5, borderColor: COLORS.primary, borderTopLeftRadius: 44 },
+  cornerTR: { position: 'absolute', top: -8, right: -8, width: 50, height: 50, borderTopWidth: 5, borderRightWidth: 5, borderColor: COLORS.primary, borderTopRightRadius: 44 },
+  cornerBL: { position: 'absolute', bottom: -8, left: -8, width: 50, height: 50, borderBottomWidth: 5, borderLeftWidth: 5, borderColor: COLORS.primary, borderBottomLeftRadius: 44 },
+  cornerBR: { position: 'absolute', bottom: -8, right: -8, width: 50, height: 50, borderBottomWidth: 5, borderRightWidth: 5, borderColor: COLORS.primary, borderBottomRightRadius: 44 },
 
   topControls: {
     position: 'absolute',
