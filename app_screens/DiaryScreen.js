@@ -266,9 +266,9 @@ export default function DiaryScreen({ navigation, route }) {
                                 <View style={styles.cardContent}>
                                     {/* Left: Product Image Container */}
                                     <View style={[styles.thumbnailWrapper, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
-                                        {item.imageUri ? (
+                                        {item.imageUri || item.imageUrl ? (
                                             <Image
-                                                source={{ uri: item.imageUri }}
+                                                source={{ uri: item.imageUri || item.imageUrl }}
                                                 style={[styles.thumbnail, { opacity: 0.95 }]}
                                                 contentFit="cover"
                                                 transition={300}

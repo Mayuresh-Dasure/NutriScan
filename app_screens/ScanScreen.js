@@ -2,8 +2,11 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import Svg, { Defs, Mask, Rect } from 'react-native-svg';
+
 import { GradientButton } from '../components/GradientButton';
 import { Body, Heading } from '../components/Typography';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '../constants/theme';
@@ -35,7 +38,14 @@ export default function ScanScreen({ navigation }) {
   const [torch, setTorch] = useState(false);
   const [cameraType, setCameraType] = useState(CameraType.back);
   const [scanMode, setScanMode] = useState(SCAN_MODES.LABEL);
+  const [scanned, setScanned] = useState(false);
   const [guidance, setGuidance] = useState(GUIDANCE_TIPS[0]);
+
+  // Viewfinder Settings
+  const vSize = 300;
+  const vRadius = 80;
+  const vTop = (height - vSize) / 2 - 40;
+  const vLeft = (width - vSize) / 2;
 
   const cameraRef = useRef(null);
   const shutterAnim = useRef(new Animated.Value(0)).current;
@@ -147,11 +157,20 @@ export default function ScanScreen({ navigation }) {
     try {
       console.log(`Scanned barcode: ${data} (type: ${type})`);
       const productData = await fetchProductByBarcode(data);
-      navigation.navigate('Result', { logData: productData });
+
+      if (productData) {
+        navigation.navigate('Result', { logData: productData });
+      } else {
+        // Fallback: Product not found in database, use AI estimation
+        console.log("Barcode not found, falling back to AI assessment");
+        // We need to capture an image for AI assessment
+        handleCapture();
+      }
     } catch (error) {
+      console.error("Barcode handling error:", error);
       Alert.alert(
-        'Product Not Found',
-        'This product is not in our database. Try scanning the nutrition label instead.',
+        'Scan Error',
+        'Something went wrong while identifying this product. Please try scanning the label.',
         [{ text: 'OK', onPress: () => setScanned(false) }]
       );
     } finally {
@@ -231,18 +250,22 @@ export default function ScanScreen({ navigation }) {
             />
           </Animated.View>
         </View>
-        <View style={styles.overlayBottom}>
-          {/* Dynamic Guidance */}
-          <View style={styles.guidancePill}>
-            <MaterialIcons name="info-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Body inverse style={styles.instructionText}>{guidance}</Body>
-          </View>
-        </View>
+
+        {/* Pulsing Curved Corners */}
+        <Animated.View style={[styles.cornerTL, { opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+        <Animated.View style={[styles.cornerTR, { opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+        <Animated.View style={[styles.cornerBL, { opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+        <Animated.View style={[styles.cornerBR, { opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+      </View>
+
+      <View style={[styles.guidanceContainer, { top: vTop + vSize + 30 }]}>
+        <Animated.View style={[styles.guidancePill, { opacity: guidanceOpacity }]}>
+          <MaterialIcons name="info-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+          <Body inverse style={styles.instructionText}>{guidance}</Body>
+        </Animated.View>
       </View>
 
       {/* Header with Blur */}
-      {/* Header with Blur */}
-      {/* Updated layout: Back on Left, Flashlight on Right */}
       <BlurView intensity={20} style={styles.topControls}>
         <TouchableOpacity
           style={styles.iconButton}
@@ -252,7 +275,6 @@ export default function ScanScreen({ navigation }) {
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
 
-        {/* Flash Toggle moved to top right */}
         <TouchableOpacity
           style={styles.iconButton}
           onPress={() => setTorch(!torch)}
@@ -268,7 +290,6 @@ export default function ScanScreen({ navigation }) {
 
       {/* Footer with Blur */}
       <BlurView intensity={30} style={styles.bottomControls}>
-        {/* Gallery Picker moved to bottom left */}
         <TouchableOpacity
           style={styles.secondaryButton}
           onPress={pickImage}

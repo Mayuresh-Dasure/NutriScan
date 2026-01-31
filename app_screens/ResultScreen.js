@@ -186,6 +186,7 @@ export default function ResultScreen({ route, navigation }) {
         const newLog = {
           timestamp: serverTimestamp(),
           imageUri: imageUri || null,
+          imageUrl: analysis.imageUrl || null,
           ...entryData
         };
         await push(logsRef, newLog);
@@ -329,9 +330,9 @@ export default function ResultScreen({ route, navigation }) {
 
               {/* Placed Product Image */}
               <View style={[styles.imageContainer, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
-                {imageUri || logData?.imageUri ? (
+                {imageUri || logData?.imageUri || logData?.imageUrl || analysis?.imageUrl ? (
                   <Image
-                    source={{ uri: imageUri || logData?.imageUri }}
+                    source={{ uri: imageUri || logData?.imageUri || analysis?.imageUrl || logData?.imageUrl }}
                     style={styles.productImage}
                     contentFit="cover"
                     transition={300}

@@ -12,7 +12,8 @@ export const fetchProductByBarcode = async (barcode) => {
         );
 
         if (response.data.status === 0) {
-            throw new Error('Product not found in database');
+            console.warn(`Product with barcode ${barcode} not found in database.`);
+            return null;
         }
 
         const product = response.data.product;
