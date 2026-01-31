@@ -91,12 +91,9 @@ function RootNavigator() {
       const unsubSettings = onValue(settingsRef, (snapshot) => {
         clearTimeout(safetyTimeout);
         const data = snapshot.val();
-        console.log('DEBUG: User Settings Data:', data);
         if (data && (data.onboardingComplete === true || data.diet || data.calculatedLimits)) {
-          console.log('DEBUG: Onboarding COMPLETE');
           setOnboardingComplete(true);
         } else {
-          console.log('DEBUG: Onboarding INCOMPLETE - Redirecting to Onboarding');
           setOnboardingComplete(false);
         }
         setLoading(false);

@@ -299,25 +299,21 @@ export default function ScanScreen({ navigation }) {
           <Ionicons name="images-outline" size={24} color="#fff" />
         </TouchableOpacity>
 
-        {/* Shutter Button (Only for Label Scan) */}
-        {scanMode === SCAN_MODES.LABEL ? (
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.shutterButtonOuter}
-            onPress={handleCapture}
-            disabled={loading}
-          >
-            <View style={styles.shutterButtonInner}>
-              {loading && <ActivityIndicator size="small" color={COLORS.primary} />}
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <View style={[styles.shutterButtonOuter, { opacity: 0.5, borderColor: 'rgba(255,255,255,0.5)' }]}>
-            <View style={[styles.shutterButtonInner, { backgroundColor: 'transparent' }]}>
-              <MaterialIcons name="qr-code-scanner" size={32} color="#fff" />
-            </View>
+        {/* Shutter Button - Works in both modes */}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.shutterButtonOuter}
+          onPress={handleCapture}
+          disabled={loading}
+        >
+          <View style={styles.shutterButtonInner}>
+            {loading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : scanMode === SCAN_MODES.BARCODE ? (
+              <MaterialIcons name="qr-code-scanner" size={28} color={COLORS.primary} />
+            ) : null}
           </View>
-        )}
+        </TouchableOpacity>
 
         {/* Scan Mode Toggle */}
         <TouchableOpacity
