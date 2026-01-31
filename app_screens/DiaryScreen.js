@@ -274,7 +274,9 @@ export default function DiaryScreen({ navigation, route }) {
                                                 transition={300}
                                             />
                                         ) : (
-                                            <MaterialIcons name="photo-camera" size={24} color={isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'} />
+                                            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#1a262f' : '#f0fdf4', justifyContent: 'center', alignItems: 'center' }}>
+                                                <MaterialIcons name="restaurant" size={22} color="#10b981" />
+                                            </View>
                                         )}
 
                                         <View style={styles.scanBadge}>
